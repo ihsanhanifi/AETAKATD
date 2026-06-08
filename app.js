@@ -14,10 +14,8 @@ const btnStartCamera = document.getElementById('btnStartCamera');
 const btnCapture = document.getElementById('btnCapture');
 const btnRetake = document.getElementById('btnRetake');
 const fotoSelfieInput = document.getElementById('fotoSelfie');
-const noHpInput = document.getElementById('noHp'); // <-- Elemen Baru
 
 let stream = null;
-let debounceTimer; // <-- Timer untuk debounce
 
 asalSelect.addEventListener('change', function() {
     if (this.value === 'Instansi') {
@@ -73,65 +71,6 @@ btnRetake.addEventListener('click', () => {
     btnStartCamera.classList.remove('hidden');
     btnStartCamera.click();
 });
-
-// --- FITUR BARU: AUTO-FILL BERDASARKAN NO HP ---
-noHpInput.addEventListener('input', function() {
-    clearTimeout(debounceTimer);
-    const phone = this.value.trim();
-    
-    // Hanya cek jika nomor HP minimal 10 karakter (format Indonesia)
-    if (phone.length >= 10) {
-        debounceTimer = setTimeout(() => {
-            checkExistingGuest(phone);
-        }, 800000000); // Tunggu 800ms setelah user berhenti mengetik
-    }
-});
-
-async function checkExistingGuest(phone) {
-    showLoading(true, "Mengecek data tamu sebelumnya...");
-    try {
-        const res = await fetch(`${API_URL}?action=checkGuest&noHp=${encodeURIComponent(phone)}`);
-        const result = await res.json();
-
-        if (result.status === 'found') {
-            const data = result.data;
-            
-            // 1. Isi otomatis field-field data
-            document.getElementById('nama').value = data.nama;
-            document.getElementById('asal').value = data.asal;
-            document.getElementById('tujuan').value = data.tujuan;
-            document.getElementById('keperluan').value = data.keperluan;
-            
-            // 2. Trigger event 'change' agar logika tampilan field Instansi berjalan
-            asalSelect.dispatchEvent(new Event('change'));
-            
-            if (data.asal === 'Instansi') {
-                document.getElementById('namaInstansi').value = data.namaInstansi;
-            }
-            
-            // 3. RESET FOTO SELFIE (Wajib ambil baru)
-            fotoSelfieInput.value = '';
-            photoPreview.style.display = 'none';
-            videoElement.style.display = 'block';
-            btnRetake.classList.add('hidden');
-            btnStartCamera.classList.remove('hidden');
-            
-            // Matikan kamera jika sedang nyala agar bisa di-restart bersih
-            if (stream) {
-                stream.getTracks().forEach(track => track.stop());
-                stream = null;
-            }
-
-            showModal('success', 'Data kunjungan sebelumnya ditemukan! Formulir otomatis terisi. Silakan ambil foto selfie terbaru.');
-        }
-    } catch (error) {
-        console.error("Gagal mengecek data", error);
-    } finally {
-        showLoading(false);
-    }
-}
-// --- AKHIR FITUR BARU ---
-
 
 guestForm.addEventListener('submit', async (e) => {
     e.preventDefault();
