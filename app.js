@@ -1,4 +1,4 @@
-const API_URL = 'https://script.google.com/macros/s/AKfycbwnT4kw4BC60Mu1Bve525ARoilh-6I5aGdDFGOXVRMb1ypzxhROah2_ojrP2gqpWRw1/exec'; // GANTI DENGAN URL ANDA
+const API_URL = 'YOUR_GOOGLE_APPS_SCRIPT_URL'; // GANTI DENGAN URL ANDA
 
 const guestForm = document.getElementById('guestForm');
 const asalSelect = document.getElementById('asal');
@@ -7,6 +7,9 @@ const namaInstansiInput = document.getElementById('namaInstansi');
 const loadingOverlay = document.getElementById('loadingOverlay');
 const notificationModal = document.getElementById('notificationModal');
 
+// Elemen Kamera Baru
+const cameraBox = document.getElementById('cameraBox');
+const cameraPlaceholder = document.getElementById('cameraPlaceholder');
 const videoElement = document.getElementById('videoElement');
 const canvasElement = document.getElementById('canvasElement');
 const photoPreview = document.getElementById('photoPreview');
@@ -14,9 +17,9 @@ const btnStartCamera = document.getElementById('btnStartCamera');
 const btnCapture = document.getElementById('btnCapture');
 const btnRetake = document.getElementById('btnRetake');
 const fotoSelfieInput = document.getElementById('fotoSelfie');
-
 let stream = null;
 
+// Toggle Instansi Input
 asalSelect.addEventListener('change', function() {
     if (this.value === 'Instansi') {
         instansiGroup.classList.remove('hidden');
@@ -29,11 +32,18 @@ asalSelect.addEventListener('change', function() {
     }
 });
 
+// 1. Aktifkan Kamera
 btnStartCamera.addEventListener('click', async () => {
     showLoading(true, "Mengaktifkan kamera...");
     try {
         stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
         videoElement.srcObject = stream;
+        
+        // Atur tampilan
+        cameraPlaceholder.classList.add('hidden');
+        videoElement.classList.remove('hidden');
+        cameraBox.classList.add('active');
+        
         btnStartCamera.classList.add('hidden');
         btnCapture.classList.remove('hidden');
         btnCapture.classList.add('animate-fade-in');
@@ -44,6 +54,7 @@ btnStartCamera.addEventListener('click', async () => {
     }
 });
 
+// 2. Ambil Foto
 btnCapture.addEventListener('click', () => {
     canvasElement.width = videoElement.videoWidth;
     canvasElement.height = videoElement.videoHeight;
@@ -52,10 +63,13 @@ btnCapture.addEventListener('click', () => {
     
     fotoSelfieInput.value = base64Image;
     photoPreview.src = base64Image;
-    photoPreview.style.display = 'block';
-    photoPreview.classList.add('animate-fade-in');
-    videoElement.style.display = 'none';
     
+    // Atur tampilan setelah foto diambil
+    videoElement.classList.add('hidden');
+    photoPreview.classList.remove('hidden');
+    photoPreview.classList.add('animate-fade-in');
+    
+    // Hentikan stream kamera untuk menghemat baterai
     stream.getTracks().forEach(track => track.stop());
     
     btnCapture.classList.add('hidden');
@@ -63,15 +77,21 @@ btnCapture.addEventListener('click', () => {
     btnRetake.classList.add('animate-fade-in');
 });
 
+// 3. Ulangi Foto
 btnRetake.addEventListener('click', () => {
     fotoSelfieInput.value = '';
-    photoPreview.style.display = 'none';
-    videoElement.style.display = 'block';
+    photoPreview.classList.add('hidden');
+    videoElement.classList.remove('hidden');
+    cameraPlaceholder.classList.add('hidden');
+    
     btnRetake.classList.add('hidden');
     btnStartCamera.classList.remove('hidden');
+    
+    // Nyalakan kamera lagi
     btnStartCamera.click();
 });
 
+// 4. Submit Form
 guestForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     
@@ -99,13 +119,19 @@ guestForm.addEventListener('submit', async (e) => {
 
         if (result.status === 'success') {
             showModal('success', 'Terima kasih! Data tamu berhasil disimpan.');
+            
+            // Reset Form & Kamera ke kondisi awal
             guestForm.reset();
             fotoSelfieInput.value = '';
-            photoPreview.style.display = 'none';
-            videoElement.style.display = 'block';
+            photoPreview.classList.add('hidden');
+            videoElement.classList.add('hidden');
+            cameraPlaceholder.classList.remove('hidden');
+            cameraBox.classList.remove('active');
+            
             btnRetake.classList.add('hidden');
             btnStartCamera.classList.remove('hidden');
             instansiGroup.classList.add('hidden');
+            
             if (stream) stream.getTracks().forEach(track => track.stop());
         } else {
             showModal('error', 'Gagal menyimpan data: ' + result.message);
@@ -117,6 +143,7 @@ guestForm.addEventListener('submit', async (e) => {
     }
 });
 
+// Utility Functions
 function showLoading(show, text = "Loading / Mengambil data...") {
     const textEl = loadingOverlay.querySelector('.loading-text');
     if (textEl) textEl.innerText = text;
