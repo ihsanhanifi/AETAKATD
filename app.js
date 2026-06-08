@@ -83,7 +83,7 @@ noHpInput.addEventListener('input', function() {
     if (phone.length >= 10) {
         debounceTimer = setTimeout(() => {
             checkExistingGuest(phone);
-        }, 800); // Tunggu 800ms setelah user berhenti mengetik
+        }, 800000000); // Tunggu 800ms setelah user berhenti mengetik
     }
 });
 
