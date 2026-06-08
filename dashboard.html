@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Dashboard Admin - E-Tamu Kemenag</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- Login Section -->
+    <div id="loginSection" class="container" style="max-width: 400px; margin-top: 10vh;">
+        <div class="logo-container animate-fade-in">
+            <img src="kemenag.png" alt="Logo">
+            <h2>Login Admin</h2>
+        </div>
+        <form id="loginForm" class="animate-slide-up">
+            <div class="form-group">
+                <label>Username</label>
+                <input type="text" id="username" class="form-control" required>
+            </div>
+            <div class="form-group">
+                <label>Password</label>
+                <div class="password-wrapper">
+                    <input type="password" id="password" class="form-control" required>
+                    <span class="toggle-password" onclick="togglePassword()">👁️</span>
+                </div>
+            </div>
+            <button type="submit" class="btn-primary">Masuk</button>
+        </form>
+        <div class="admin-link"><a href="index.html">← Kembali ke Halaman Tamu</a></div>
+    </div>
+
+    <!-- Dashboard Section -->
+    <div id="dashboardSection" class="container hidden" style="max-width: 1200px;">
+        <div class="dashboard-header">
+            <div style="display: flex; align-items: center; gap: 10px; flex: 1;">
+                <button class="hamburger" onclick="toggleMobileMenu()" aria-label="Menu">☰</button>
+                <img src="kemenag.png" width="50" style="vertical-align: middle;">
+                <span style="font-size: 1.1rem; font-weight: bold; color: var(--kemenag-green);">Dashboard E-Tamu</span>
+            </div>
+            <div style="text-align: right;">
+                <div id="currentDateTime" style="font-weight: bold; color: var(--kemenag-green); font-size: 0.9rem;"></div>
+                <div id="userInfo" style="font-size: 0.85rem; color: #666;"></div>
+                <button class="btn-secondary" onclick="logout()" style="margin-top: 5px; font-size: 0.8rem; padding: 0.4rem 0.8rem;">Logout</button>
+            </div>
+        </div>
+
+        <div class="nav-tabs-container">
+            <div class="nav-tabs" id="mobileNavTabs">
+                <button class="nav-tab active" onclick="switchTab('stats', this)">📊 Statistik</button>
+                <button class="nav-tab" onclick="switchTab('guests', this)">📋 Data Tamu</button>
+                <button class="nav-tab admin-only hidden" onclick="switchTab('users', this)">👥 Kelola User</button>
+                <button class="nav-tab admin-only hidden" onclick="switchTab('settings', this)">⚙️ Pengaturan</button>
+            </div>
+        </div>
+
+        <!-- Tab: Statistik -->
+        <div id="tab-stats" class="tab-content animate-fade-in">
+            <div class="stats-grid" id="statsGrid"></div>
+            <div id="sectionStats" class="hidden animate-fade-in">
+                <h3 style="margin-bottom: 1rem; color: var(--kemenag-green);">Tamu per Seksi</h3>
+                <div class="table-responsive">
+                    <table id="sectionStatsTable">
+                        <thead><tr><th>Seksi</th><th>Jumlah Tamu</th></tr></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab: Data Tamu (Tersedia untuk Admin Utama & Admin Seksi) -->
+        <div id="tab-guests" class="tab-content hidden animate-fade-in">
+            <h3 id="guestTableTitle" style="margin-bottom: 1rem; color: var(--kemenag-green);">Daftar Tamu</h3>
+            
+            <!-- Filter Container Baru -->
+            <div class="filter-container no-print">
+                <!-- Baris 1: Tipe Filter -->
+                <div class="filter-row">
+                    <label class="filter-label">📅 Tipe Filter:</label>
+                    <select id="filterType" class="filter-input" onchange="toggleFilterInputs()">
+                        <option value="all">Semua Data</option>
+                        <option value="today">Hari Ini</option>
+                        <option value="specific_date">Hari Tertentu</option>
+                        <option value="week">Minggu Ini</option>
+                        <option value="month">Bulan Ini</option>
+                        <option value="specific_month">Bulan Tertentu</option>
+                        <option value="year">Tahun Ini</option>
+                        <option value="specific_year">Tahun Tertentu</option>
+                        <option value="range">Rentang Tanggal</option>
+                    </select>
+                </div>
+
+                <!-- Baris 2: Input Spesifik (Dinamis) -->
+                <div class="filter-row" id="filterSpecificRow" style="display: none;">
+                    <label class="filter-label" id="filterSpecificLabel">Pilih:</label>
+                    
+                    <!-- Input untuk Hari Tertentu -->
+                    <input type="date" id="filterDate" class="filter-input" style="display: none;">
+                    
+                    <!-- Input untuk Bulan Tertentu -->
+                    <input type="month" id="filterMonth" class="filter-input" style="display: none;">
+                    
+                    <!-- Input untuk Tahun Tertentu -->
+                    <select id="filterYear" class="filter-input" style="display: none;">
+                        <option value="">-- Pilih Tahun --</option>
+                    </select>
+                    
+                    <!-- Input untuk Rentang Tanggal -->
+                    <div id="filterRange" class="filter-date-range" style="display: none;">
+                        <input type="date" id="filterDateFrom" class="filter-input">
+                        <span>s/d</span>
+                        <input type="date" id="filterDateTo" class="filter-input">
+                    </div>
+                </div>
+
+                <!-- Baris 3: Filter Seksi (Admin Utama Only) -->
+                <div class="filter-row admin-only hidden" id="filterSeksiRow">
+                    <label class="filter-label">🏢 Filter Seksi:</label>
+                    <select id="filterSeksi" class="filter-input">
+                        <option value="all">Semua Seksi</option>
+                        <option value="Kepala Kantor">Kepala Kantor</option>
+                        <option value="Kasubag TU">Kasubag TU</option>
+                        <option value="PTSP">PTSP</option>
+                        <option value="Kepegawaian">Kepegawaian</option>
+                        <option value="Keuangan">Keuangan</option>
+                        <option value="Perencana">Perencana</option>
+                        <option value="Humas">Humas</option>
+                        <option value="Penerjemah">Penerjemah</option>
+                        <option value="Pengawas">Pengawas</option>
+                        <option value="PAIS">PAIS</option>
+                        <option value="PD.PONTREN">PD.PONTREN</option>
+                        <option value="PENMAD">PENMAD</option>
+                        <option value="BIMAS">BIMAS</option>
+                        <option value="ZAWA">ZAWA</option>
+                    </select>
+                </div>
+
+                <!-- Baris 4: Tombol Aksi -->
+                <div class="filter-row">
+                    <button class="btn-apply-filter" onclick="applyFilter()">🔍 Terapkan Filter</button>
+                    <button class="btn-reset-filter" onclick="resetFilter()">🔄 Reset</button>
+                    <button class="btn-primary" style="width: auto; margin-top: 0; margin-left: auto; flex: 0 0 auto;" onclick="printReport()">🖨️ Cetak Laporan</button>
+                </div>
+            </div>
+
+            <!-- Filter Summary (Ringkasan Filter Aktif) -->
+            <div class="filter-summary" id="filterSummary">
+                Menampilkan data untuk: <strong id="filterSummaryText">-</strong>
+            </div>
+            
+            <div id="printArea">
+                <div id="printHeader">
+                    <img src="kemenag.png" alt="Logo Kemenag">
+                    <h3 id="printTitle">Laporan Data Tamu</h3>
+                    <p id="printPeriod">Memuat periode laporan...</p>
+                    <p id="printInstitution">Kantor Kementerian Agama Kabupaten Tanah Datar</p>
+                </div>
+                <div class="table-responsive">
+                    <table id="guestsTable">
+                        <thead>
+                            <tr>
+                                <th>No</th>
+                                <th>Waktu</th>
+                                <th>Nama</th>
+                                <th>Asal</th>
+                                <th>Tujuan</th>
+                                <th>Keperluan</th>
+                                <th>No. HP</th>
+                                <th class="no-print">Foto</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab: Kelola User (Admin Utama Only) -->
+        <div id="tab-users" class="tab-content hidden animate-fade-in">
+            <button class="btn-primary" style="width: auto; margin-bottom: 1rem;" onclick="showUserModal()">+ Tambah User</button>
+            <div class="table-responsive">
+                <table id="usersTable">
+                    <thead><tr><th>Username</th><th>Role</th><th>Seksi</th><th>Aksi</th></tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Tab: Pengaturan (Admin Utama Only) -->
+        <div id="tab-settings" class="tab-content hidden animate-fade-in">
+            <div class="form-group">
+                <label>URL Background Dashboard</label>
+                <input type="text" id="bgUrlInput" class="form-control" placeholder="https://example.com/image.jpg">
+                <button class="btn-primary" style="width: auto; margin-top: 10px;" onclick="saveSettings()">Simpan Pengaturan</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal User -->
+    <div id="userModal" class="modal hidden">
+        <div class="modal-content" style="text-align: left;">
+            <h3 id="userModalTitle" style="margin-bottom: 1rem; color: var(--kemenag-green);">Tambah User</h3>
+            <input type="hidden" id="editUsername">
+            <div class="form-group">
+                <label>Username</label>
+                <input type="text" id="newUsername" class="form-control">
+            </div>
+            <div class="form-group">
+                <label>Password</label>
+                <input type="password" id="newPassword" class="form-control" placeholder="Kosongkan jika tidak diubah">
+            </div>
+            <div class="form-group">
+                <label>Role</label>
+                <select id="newRole" class="form-control" onchange="toggleSeksiInput()">
+                    <option value="admin_utama">Admin Utama</option>
+                    <option value="admin_seksi">Admin Seksi</option>
+                </select>
+            </div>
+            <div class="form-group hidden" id="seksiInputGroup">
+                <label>Seksi</label>
+                <select id="newSeksi" class="form-control">
+                    <option value="Kepala Kantor">Kepala Kantor</option>
+                    <option value="Kasubag TU">Kasubag TU</option>
+                    <option value="PTSP">PTSP</option>
+                    <option value="Kepegawaian">Kepegawaian</option>
+                    <option value="Keuangan">Keuangan</option>
+                    <option value="Perencana">Perencana</option>
+                    <option value="Humas">Humas</option>
+                    <option value="Penerjemah">Penerjemah</option>
+                    <option value="Pengawas">Pengawas</option>
+                    <option value="PAIS">PAIS</option>
+                    <option value="PD.PONTREN">PD.PONTREN</option>
+                    <option value="PENMAD">PENMAD</option>
+                    <option value="BIMAS">BIMAS</option>
+                    <option value="ZAWA">ZAWA</option>
+                </select>
+            </div>
+            <div style="display: flex; gap: 10px; margin-top: 1.5rem;">
+                <button class="btn-primary" style="margin-top: 0;" onclick="saveUser()">Simpan</button>
+                <button class="btn-secondary" style="margin-top: 0;" onclick="closeUserModal()">Batal</button>
+            </div>
+        </div>
+    </div>
+
+    <footer class="footer">
+        Dibuat oleh Ihsan Putra Hanifi, S.Kom<br>
+        Pranata Komputer Kantor Kementerian Agama Kab. Tanah Datar
+    </footer>
+
+    <div id="loadingOverlay" class="loading-overlay hidden">
+        <div class="spinner"></div>
+        <div class="loading-text">Loading / Mengambil data...</div>
+    </div>
+    
+    <div id="notificationModal" class="modal hidden">
+        <div class="modal-content">
+            <h3 id="modalTitle">Sukses</h3>
+            <p id="modalMessage">Data berhasil disimpan.</p>
+            <button class="btn-primary" onclick="closeModal()" style="margin-top: 1rem;">Tutup</button>
+        </div>
+    </div>
+
+        <!-- Lightbox Modal untuk Foto Tamu -->
+    <div id="photoLightbox" class="lightbox-modal hidden" onclick="closeLightbox(event)">
+        <div class="lightbox-content" onclick="event.stopPropagation()">
+            <button class="lightbox-close" onclick="closeLightbox()">×</button>
+            <img id="lightboxImage" src="" alt="Foto Tamu">
+            <div class="lightbox-caption" id="lightboxCaption"></div>
+        </div>
+    </div>
+
+    <!-- Modal Idle Warning (Auto Logout) -->
+    <div id="idleWarningModal" class="modal hidden" style="z-index: 10002;">
+        <div class="modal-content idle-warning-content">
+            <div class="idle-icon">⏰</div>
+            <h3 style="color: #d97706; margin-bottom: 0.5rem;">Sesi Tidak Aktif</h3>
+            <p style="margin-bottom: 1rem;">Anda tidak melakukan aktivitas selama beberapa waktu.</p>
+            <p style="margin-bottom: 1.5rem;">
+                Sesi akan berakhir dalam <strong id="idleCountdown" style="color: #dc2626; font-size: 1.5rem;">30</strong> detik
+            </p>
+            <div style="display: flex; gap: 10px;">
+                <button class="btn-primary" style="margin-top: 0;" onclick="continueSession()">
+                    ✅ Lanjutkan Sesi
+                </button>
+                <button class="btn-secondary" style="margin-top: 0; background: #dc3545;" onclick="performIdleLogout()">
+                    🚪 Logout Sekarang
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script src="dashboard.js"></script>
+</body>
+</html>
