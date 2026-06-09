@@ -260,17 +260,15 @@ async function loadStats() {
             <div class="stat-card animate-slide-up" style="animation-delay: 0.1s;"><h3>${data.total}</h3><p>Total Keseluruhan Tamu</p></div>
         `;
         
+        // 🆕 Load detail tamu hari ini
+        loadTodayGuests();
+        
+        // 🆕 Load detail per seksi untuk admin utama
         if (currentUser.role === 'admin_utama' && data.perSeksi) {
-            document.getElementById('sectionStats').classList.remove('hidden');
-            const tbody = document.querySelector('#sectionStatsTable tbody');
-            tbody.innerHTML = '';
-            let delay = 0;
-            for (const [seksi, count] of Object.entries(data.perSeksi)) {
-                tbody.innerHTML += `<tr class="animate-fade-in" style="animation-delay: ${delay}s"><td>${seksi}</td><td>${count}</td></tr>`;
-                delay += 0.05;
-            }
+            document.getElementById('seksiDetailSection').classList.remove('hidden');
+            loadSeksiDetail(data.perSeksi);
         } else {
-            document.getElementById('sectionStats').classList.add('hidden');
+            document.getElementById('seksiDetailSection').classList.add('hidden');
         }
     } catch (err) {
         showModal('error', 'Gagal memuat statistik');
@@ -278,6 +276,219 @@ async function loadStats() {
         showLoading(false);
     }
 }
+
+// === FUNGSI DETAIL STATISTIK ===
+
+// Load detail tamu hari ini
+async function loadTodayGuests() {
+    try {
+        const res = await fetch(`${API_URL}?action=getTodayGuests&role=${currentUser.role}&seksi=${currentUser.seksi || ''}`);
+        const data = await res.json();
+        
+        const list = document.getElementById('todayGuestList');
+        const badge = document.getElementById('todayCountBadge');
+        
+        if (data.status !== 'success' || !data.guests || data.guests.length === 0) {
+            list.innerHTML = `
+                <div class="detail-empty">
+                    <div class="detail-empty-icon">📭</div>
+                    <p>Belum ada tamu hari ini</p>
+                </div>
+            `;
+            badge.innerText = '0 tamu';
+            return;
+        }
+        
+        badge.innerText = `${data.guests.length} tamu`;
+        
+        list.innerHTML = data.guests.map(g => {
+            const time = new Date(g.timestamp).toLocaleTimeString('id-ID', { 
+                hour: '2-digit', 
+                minute: '2-digit' 
+            });
+            const asal = g.asal === 'Instansi' ? g.namaInstansi : 'Umum';
+            
+            return `
+                <div class="today-guest-item">
+                    <div class="guest-time">🕐 ${time}</div>
+                    <div class="guest-info">
+                        <div class="guest-name">${g.nama}</div>
+                        <div class="guest-meta">
+                            <span class="guest-meta-item">📍 ${asal}</span>
+                            <span class="guest-meta-item">📞 ${g.noHp}</span>
+                        </div>
+                    </div>
+                    <span class="guest-seksi-badge">${g.tujuan}</span>
+                </div>
+            `;
+        }).join('');
+        
+    } catch (err) {
+        console.error('Gagal memuat detail tamu hari ini:', err);
+    }
+}
+
+// Load detail per seksi (Admin Utama)
+function loadSeksiDetail(perSeksi) {
+    const tbody = document.querySelector('#seksiDetailTable tbody');
+    const badge = document.getElementById('seksiCountBadge');
+    
+    if (!perSeksi || Object.keys(perSeksi).length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="4" style="text-align: center; padding: 2rem; color: #999;">
+                    Belum ada data tamu
+                </td>
+            </tr>
+        `;
+        badge.innerText = '0 seksi';
+        return;
+    }
+    
+    badge.innerText = `${Object.keys(perSeksi).length} seksi`;
+    
+    // Hitung tamu hari ini per seksi
+    const todayGuests = allGuests.filter(g => {
+        const gDate = new Date(g.timestamp);
+        const now = new Date();
+        return gDate.toDateString() === now.toDateString();
+    });
+    
+    const todayPerSeksi = {};
+    todayGuests.forEach(g => {
+        todayPerSeksi[g.tujuan] = (todayPerSeksi[g.tujuan] || 0) + 1;
+    });
+    
+    // Sort by jumlah tamu (descending)
+    const sortedSeksi = Object.entries(perSeksi).sort((a, b) => b[1] - a[1]);
+    
+    tbody.innerHTML = sortedSeksi.map(([seksi, count], index) => {
+        const todayCount = todayPerSeksi[seksi] || 0;
+        return `
+            <tr class="seksi-detail-row animate-fade-in" 
+                style="animation-delay: ${index * 0.05}s"
+                onclick="showSeksiDetailModal('${seksi}', ${count}, ${todayCount})">
+                <td>${seksi}</td>
+                <td style="text-align: center;">
+                    <span class="seksi-count">${count}</span>
+                </td>
+                <td style="text-align: center;">
+                    <span class="seksi-count" style="background: ${todayCount > 0 ? 'var(--kemenag-green)' : '#ccc'}; color: white;">
+                        ${todayCount}
+                    </span>
+                </td>
+                <td style="text-align: center;">
+                    <span class="seksi-view-btn">👁️ Lihat Detail</span>
+                </td>
+            </tr>
+        `;
+    }).join('');
+}
+
+// Tampilkan modal detail per seksi
+async function showSeksiDetailModal(seksi, totalCount, todayCount) {
+    const modal = document.getElementById('seksiDetailModal');
+    const title = document.getElementById('seksiModalTitle');
+    const stats = document.getElementById('seksiModalStats');
+    const list = document.getElementById('seksiModalList');
+    
+    title.innerText = `🏢 Detail Tamu - ${seksi}`;
+    
+    stats.innerHTML = `
+        <div class="seksi-modal-stat">
+            <div class="seksi-modal-stat-value">${totalCount}</div>
+            <div class="seksi-modal-stat-label">Total Keseluruhan</div>
+        </div>
+        <div class="seksi-modal-stat">
+            <div class="seksi-modal-stat-value">${todayCount}</div>
+            <div class="seksi-modal-stat-label">Tamu Hari Ini</div>
+        </div>
+    `;
+    
+    list.innerHTML = `
+        <div class="detail-empty">
+            <div class="detail-empty-icon">⏳</div>
+            <p>Memuat data tamu...</p>
+        </div>
+    `;
+    
+    modal.classList.remove('hidden');
+    modal.classList.add('animate-fade-in');
+    document.body.style.overflow = 'hidden';
+    
+    // Load data tamu untuk seksi ini
+    try {
+        const res = await fetch(`${API_URL}?action=getGuestsBySeksi&seksi=${encodeURIComponent(seksi)}`);
+        const data = await res.json();
+        
+        if (data.status !== 'success' || !data.guests || data.guests.length === 0) {
+            list.innerHTML = `
+                <div class="detail-empty">
+                    <div class="detail-empty-icon">📭</div>
+                    <p>Belum ada tamu untuk seksi ini</p>
+                </div>
+            `;
+            return;
+        }
+        
+        list.innerHTML = data.guests.map(g => {
+            const date = new Date(g.timestamp).toLocaleString('id-ID', {
+                day: '2-digit',
+                month: 'short',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+            const asal = g.asal === 'Instansi' ? g.namaInstansi : 'Umum';
+            
+            return `
+                <div class="seksi-modal-item">
+                    <div class="seksi-modal-item-header">
+                        <span class="seksi-modal-item-name">${g.nama}</span>
+                        <span class="seksi-modal-item-time">${date}</span>
+                    </div>
+                    <div class="seksi-modal-item-detail">
+                        📍 ${asal} | 📞 ${g.noHp}<br>
+                        📝 ${g.keperluan}
+                    </div>
+                </div>
+            `;
+        }).join('');
+        
+    } catch (err) {
+        list.innerHTML = `
+            <div class="detail-empty">
+                <div class="detail-empty-icon">❌</div>
+                <p>Gagal memuat data</p>
+            </div>
+        `;
+    }
+}
+
+// Tutup modal detail seksi
+function closeSeksiModal() {
+    const modal = document.getElementById('seksiDetailModal');
+    modal.classList.add('hidden');
+    document.body.style.overflow = '';
+}
+
+// Tutup modal saat klik di luar
+document.addEventListener('click', function(e) {
+    const modal = document.getElementById('seksiDetailModal');
+    if (e.target === modal) {
+        closeSeksiModal();
+    }
+});
+
+// Tutup modal dengan tombol ESC
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        const modal = document.getElementById('seksiDetailModal');
+        if (!modal.classList.contains('hidden')) {
+            closeSeksiModal();
+        }
+    }
+});
 
 // === DATA TAMU ===
 async function loadGuests() {
