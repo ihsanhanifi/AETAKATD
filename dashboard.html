@@ -55,45 +55,50 @@
             </div>
         </div>
 
-        <!-- Tab: Statistik -->
+        <!-- Tab: Statistik (LENGKAP dengan getDetailedStats) -->
         <div id="tab-stats" class="tab-content animate-fade-in">
-            <!-- Stats Cards -->
-            <div class="stats-grid" id="statsGrid"></div>
-            
-            <!-- 🆕 Detail Tamu Hari Ini -->
-            <div class="detail-section" id="todayDetailSection">
-                <div class="detail-header">
-                    <h3 class="detail-title">
-                        <span class="detail-title-icon">📅</span>
-                        Detail Tamu Hari Ini
-                    </h3>
-                    <span class="detail-badge" id="todayCountBadge">0 tamu</span>
-                </div>
-                <div id="todayGuestList" class="today-guest-list">
-                    <div class="detail-empty">
-                        <div class="detail-empty-icon">⏳</div>
-                        <p>Memuat data...</p>
-                    </div>
+            <!-- Section 1: 4 Kartu Statistik Utama -->
+            <h3 style="color: var(--kemenag-green); margin-bottom: 1rem;">📊 Ringkasan Statistik</h3>
+            <div class="stats-grid" id="statsGrid">
+                <!-- Diisi oleh JavaScript -->
+            </div>
+
+            <!-- Section 2: Perbandingan Periode -->
+            <div class="detail-section">
+                <h3 style="color: var(--kemenag-green); margin-bottom: 1rem;">📈 Perbandingan Periode</h3>
+                <div class="comparison-grid" id="comparisonGrid">
+                    <!-- Diisi oleh JavaScript -->
                 </div>
             </div>
-            
-            <!-- 🆕 Detail Tamu per Seksi (Admin Utama Only) -->
-            <div class="detail-section admin-only hidden" id="seksiDetailSection">
-                <div class="detail-header">
-                    <h3 class="detail-title">
-                        <span class="detail-title-icon">🏢</span>
-                        Detail Tamu per Seksi
-                    </h3>
-                    <span class="detail-badge" id="seksiCountBadge">0 seksi</span>
+
+            <!-- Section 3: Breakdown Asal Tamu (Admin Utama Only) -->
+            <div class="detail-section admin-only hidden" id="asalBreakdownSection">
+                <h3 style="color: var(--kemenag-green); margin-bottom: 1rem;">🏢 Breakdown Asal Tamu</h3>
+                <div class="asal-breakdown-container" id="asalBreakdown">
+                    <!-- Diisi oleh JavaScript -->
                 </div>
+            </div>
+
+            <!-- Section 4: Top 5 Seksi Teramai (Admin Utama Only) -->
+            <div class="detail-section admin-only hidden" id="topSeksiSection">
+                <h3 style="color: var(--kemenag-green); margin-bottom: 1rem;">🏆 Top 5 Seksi Teramai</h3>
+                <div class="top-seksi-container" id="topSeksiContainer">
+                    <!-- Diisi oleh JavaScript -->
+                </div>
+            </div>
+
+            <!-- Section 5: Detail Lengkap per Seksi (Admin Utama Only) -->
+            <div class="detail-section admin-only hidden" id="sectionStats">
+                <h3 style="color: var(--kemenag-green); margin-bottom: 1rem;">📋 Detail Tamu per Seksi</h3>
                 <div class="table-responsive">
-                    <table class="seksi-detail-table" id="seksiDetailTable">
+                    <table id="sectionStatsTable">
                         <thead>
                             <tr>
-                                <th>Nama Seksi</th>
-                                <th style="text-align: center;">Jumlah Tamu</th>
-                                <th style="text-align: center;">Hari Ini</th>
-                                <th style="text-align: center;">Aksi</th>
+                                <th>No</th>
+                                <th>Seksi</th>
+                                <th>Jumlah Tamu</th>
+                                <th>Persentase</th>
+                                <th>Visualisasi</th>
                             </tr>
                         </thead>
                         <tbody></tbody>
@@ -106,7 +111,7 @@
         <div id="tab-guests" class="tab-content hidden animate-fade-in">
             <h3 id="guestTableTitle" style="margin-bottom: 1rem; color: var(--kemenag-green);">Daftar Tamu</h3>
             
-            <!-- Filter Container Baru -->
+            <!-- Filter Container -->
             <div class="filter-container no-print">
                 <!-- Baris 1: Tipe Filter -->
                 <div class="filter-row">
@@ -177,7 +182,7 @@
                 </div>
             </div>
 
-            <!-- Filter Summary (Ringkasan Filter Aktif) -->
+            <!-- Filter Summary -->
             <div class="filter-summary" id="filterSummary">
                 Menampilkan data untuk: <strong id="filterSummaryText">-</strong>
             </div>
@@ -281,11 +286,13 @@
         Pranata Komputer Kantor Kementerian Agama Kab. Tanah Datar
     </footer>
 
+    <!-- Loading Overlay -->
     <div id="loadingOverlay" class="loading-overlay hidden">
         <div class="spinner"></div>
         <div class="loading-text">Loading / Mengambil data...</div>
     </div>
     
+    <!-- Notification Modal -->
     <div id="notificationModal" class="modal hidden">
         <div class="modal-content">
             <h3 id="modalTitle">Sukses</h3>
@@ -294,7 +301,7 @@
         </div>
     </div>
 
-        <!-- Lightbox Modal untuk Foto Tamu -->
+    <!-- Lightbox Modal untuk Foto Tamu -->
     <div id="photoLightbox" class="lightbox-modal hidden" onclick="closeLightbox(event)">
         <div class="lightbox-content" onclick="event.stopPropagation()">
             <button class="lightbox-close" onclick="closeLightbox()">×</button>
@@ -320,21 +327,6 @@
                     🚪 Logout Sekarang
                 </button>
             </div>
-        </div>
-    </div>
-
-    <!-- Modal Detail per Seksi -->
-    <div id="seksiDetailModal" class="modal hidden" style="z-index: 10001;">
-        <div class="modal-content seksi-modal-content">
-            <div class="seksi-modal-header">
-                <div class="seksi-modal-title" id="seksiModalTitle">Detail Tamu</div>
-                <button class="seksi-modal-close" onclick="closeSeksiModal()">×</button>
-            </div>
-            
-            <div class="seksi-modal-stats" id="seksiModalStats"></div>
-            
-            <h4 style="margin-bottom: 0.75rem; color: var(--kemenag-green);">📋 Daftar Tamu</h4>
-            <div class="seksi-modal-list" id="seksiModalList"></div>
         </div>
     </div>
 
