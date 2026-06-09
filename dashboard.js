@@ -94,7 +94,7 @@ function showDashboard() {
     loadGuests();
     if (currentUser.role === 'admin_utama') loadUsers();
 
-    // 🆕 MULAI MONITORING IDLE
+    // Mulai monitoring idle
     startIdleMonitoring();
 }
 
@@ -102,14 +102,11 @@ function showDashboard() {
 function startIdleMonitoring() {
     resetIdleTimer();
     
-    // Event listener untuk semua jenis aktivitas user
     const events = ['mousedown', 'keydown', 'scroll', 'touchstart', 'click'];
-    
     events.forEach(event => {
         document.addEventListener(event, resetIdleTimer, { passive: true });
     });
     
-    // Throttle mousemove agar tidak terlalu sering (500ms)
     document.addEventListener('mousemove', throttledMouseMove, { passive: true });
 }
 
@@ -141,18 +138,16 @@ function throttledMouseMove(e) {
 function resetIdleTimer() {
     lastActivityTime = Date.now();
     
-    // Jika modal warning sedang muncul, sembunyikan dan batalkan countdown
     const idleModal = document.getElementById('idleWarningModal');
-    if (!idleModal.classList.contains('hidden')) {
+    if (idleModal && !idleModal.classList.contains('hidden')) {
         hideIdleWarning();
     }
     
-    // Reset timer utama
     if (idleTimer) clearTimeout(idleTimer);
     
     idleTimer = setTimeout(() => {
         showIdleWarning();
-    }, IDLE_TIMEOUT - WARNING_BEFORE); // Warning muncul 30 detik sebelum timeout
+    }, IDLE_TIMEOUT - WARNING_BEFORE);
 }
 
 function showIdleWarning() {
@@ -160,11 +155,10 @@ function showIdleWarning() {
     modal.classList.remove('hidden');
     modal.classList.add('animate-fade-in');
     
-    countdownValue = WARNING_BEFORE / 1000; // 30 detik
+    countdownValue = WARNING_BEFORE / 1000;
     const countdownEl = document.getElementById('idleCountdown');
     countdownEl.innerText = countdownValue;
     
-    // Mulai countdown
     countdownTimer = setInterval(() => {
         countdownValue--;
         countdownEl.innerText = countdownValue;
@@ -184,7 +178,6 @@ function hideIdleWarning() {
         countdownTimer = null;
     }
     
-    // Mulai timer baru
     resetIdleTimer();
 }
 
@@ -199,17 +192,13 @@ function performIdleLogout() {
     const modal = document.getElementById('idleWarningModal');
     modal.classList.add('hidden');
     
-    // Tampilkan modal info logout
     showLoading(true, "Mengakhiri sesi karena tidak aktif...");
     
     setTimeout(() => {
         showLoading(false);
         localStorage.removeItem('etamu_user');
-        
-        // Tampilkan pesan logout
         showModal('success', 'Sesi Anda telah berakhir karena tidak aktif. Silakan login kembali.');
         
-        // Redirect ke halaman login setelah modal ditutup
         setTimeout(() => {
             currentUser = null;
             document.getElementById('dashboardSection').classList.add('hidden');
@@ -221,9 +210,7 @@ function performIdleLogout() {
 }
 
 function logout() {
-
-    stopIdleMonitoring(); // 🆕 Hentikan monitoring
-    
+    stopIdleMonitoring();
     showLoading(true, "Logging out...");
     setTimeout(() => {
         localStorage.removeItem('etamu_user');
@@ -247,250 +234,247 @@ function switchTab(tabName, btnElement) {
     if (tabName === 'users') loadUsers();
 }
 
-// === STATISTIK ===
+// ============================================
+// STATISTIK DETAIL LENGKAP (getDetailedStats)
+// ============================================
+
 async function loadStats() {
-    showLoading(true, "Mengambil data statistik...");
+    showLoading(true, "Mengambil data statistik lengkap...");
     try {
-        const res = await fetch(`${API_URL}?action=getStats&role=${currentUser.role}&seksi=${currentUser.seksi || ''}`);
+        const res = await fetch(`${API_URL}?action=getDetailedStats&role=${currentUser.role}&seksi=${currentUser.seksi || ''}`);
         const data = await res.json();
         
+        if (data.status !== 'success') {
+            showModal('error', 'Gagal memuat statistik');
+            return;
+        }
+        
+        // === Section 1: 4 Kartu Statistik Utama ===
         const grid = document.getElementById('statsGrid');
         grid.innerHTML = `
-            <div class="stat-card animate-slide-up"><h3>${data.today}</h3><p>Tamu Hari Ini</p></div>
-            <div class="stat-card animate-slide-up" style="animation-delay: 0.1s;"><h3>${data.total}</h3><p>Total Keseluruhan Tamu</p></div>
+            <div class="stat-card animate-slide-up">
+                <div class="stat-icon">📅</div>
+                <h3>${data.today}</h3>
+                <p>Tamu Hari Ini</p>
+            </div>
+            <div class="stat-card gold animate-slide-up" style="animation-delay: 0.1s;">
+                <div class="stat-icon">👥</div>
+                <h3>${data.total}</h3>
+                <p>Total Keseluruhan Tamu</p>
+            </div>
+            <div class="stat-card blue animate-slide-up" style="animation-delay: 0.2s;">
+                <div class="stat-icon">📊</div>
+                <h3>${data.averagePerDay}</h3>
+                <p>Rata-rata Tamu/Hari</p>
+            </div>
+            <div class="stat-card purple animate-slide-up" style="animation-delay: 0.3s;">
+                <div class="stat-icon">📆</div>
+                <h3>${data.thisMonth}</h3>
+                <p>Tamu Bulan Ini</p>
+            </div>
         `;
         
-        // 🆕 Load detail tamu hari ini
-        loadTodayGuests();
+        // === Section 2: Perbandingan Periode ===
+        const comparisonGrid = document.getElementById('comparisonGrid');
+        const dailyTrend = calculateTrend(data.today, data.yesterday);
+        const weeklyTrend = calculateTrend(data.thisWeek, data.lastWeek);
         
-        // 🆕 Load detail per seksi untuk admin utama
-        if (currentUser.role === 'admin_utama' && data.perSeksi) {
-            document.getElementById('seksiDetailSection').classList.remove('hidden');
-            loadSeksiDetail(data.perSeksi);
+        comparisonGrid.innerHTML = `
+            <div class="comparison-card animate-fade-in">
+                <div class="comparison-title">📅 Harian</div>
+                <div class="comparison-values">
+                    <div>
+                        <div class="comparison-current">${data.today}</div>
+                        <div class="comparison-previous">Hari ini</div>
+                    </div>
+                    <div style="text-align: right;">
+                        <div class="comparison-previous" style="font-size: 1.2rem; font-weight: bold;">${data.yesterday}</div>
+                        <div class="comparison-previous">Kemarin</div>
+                    </div>
+                </div>
+                <div class="comparison-trend ${dailyTrend.class}">
+                    ${dailyTrend.icon} ${dailyTrend.text}
+                </div>
+            </div>
+            
+            <div class="comparison-card animate-fade-in" style="animation-delay: 0.1s;">
+                <div class="comparison-title">📆 Mingguan</div>
+                <div class="comparison-values">
+                    <div>
+                        <div class="comparison-current">${data.thisWeek}</div>
+                        <div class="comparison-previous">Minggu ini</div>
+                    </div>
+                    <div style="text-align: right;">
+                        <div class="comparison-previous" style="font-size: 1.2rem; font-weight: bold;">${data.lastWeek}</div>
+                        <div class="comparison-previous">Minggu lalu</div>
+                    </div>
+                </div>
+                <div class="comparison-trend ${weeklyTrend.class}">
+                    ${weeklyTrend.icon} ${weeklyTrend.text}
+                </div>
+            </div>
+            
+            <div class="comparison-card animate-fade-in" style="animation-delay: 0.2s;">
+                <div class="comparison-title">🗓️ Bulanan</div>
+                <div class="comparison-values">
+                    <div>
+                        <div class="comparison-current">${data.thisMonth}</div>
+                        <div class="comparison-previous">Bulan ini</div>
+                    </div>
+                </div>
+                <div style="font-size: 0.85rem; color: #666; margin-top: 0.5rem;">
+                    Total tamu pada bulan berjalan
+                </div>
+            </div>
+        `;
+        
+        // === Section 3: Breakdown Asal Tamu (Admin Utama Only) ===
+        const asalSection = document.getElementById('asalBreakdownSection');
+        if (currentUser.role === 'admin_utama') {
+            asalSection.classList.remove('hidden');
+            const asalBreakdown = document.getElementById('asalBreakdown');
+            const totalAsal = data.instansiCount + data.umumCount;
+            const instansiPercent = totalAsal > 0 ? ((data.instansiCount / totalAsal) * 100).toFixed(1) : 0;
+            const umumPercent = totalAsal > 0 ? ((data.umumCount / totalAsal) * 100).toFixed(1) : 0;
+            
+            asalBreakdown.innerHTML = `
+                <div class="asal-card animate-slide-up">
+                    <div class="asal-icon">🏢</div>
+                    <div class="asal-count">${data.instansiCount}</div>
+                    <div class="asal-label">Dari Instansi</div>
+                    <div class="asal-percent">${instansiPercent}%</div>
+                </div>
+                <div class="asal-card umum animate-slide-up" style="animation-delay: 0.1s;">
+                    <div class="asal-icon">👤</div>
+                    <div class="asal-count">${data.umumCount}</div>
+                    <div class="asal-label">Dari Umum</div>
+                    <div class="asal-percent">${umumPercent}%</div>
+                </div>
+            `;
         } else {
-            document.getElementById('seksiDetailSection').classList.add('hidden');
+            asalSection.classList.add('hidden');
         }
+        
+        // === Section 4: Top 5 Seksi Teramai (Admin Utama Only) ===
+        const topSeksiSection = document.getElementById('topSeksiSection');
+        if (currentUser.role === 'admin_utama' && data.topSeksi && data.topSeksi.length > 0) {
+            topSeksiSection.classList.remove('hidden');
+            const topSeksiContainer = document.getElementById('topSeksiContainer');
+            
+            const medals = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣'];
+            topSeksiContainer.innerHTML = data.topSeksi.map((item, idx) => `
+                <div class="top-seksi-item rank-${item.rank} animate-fade-in" style="animation-delay: ${idx * 0.1}s;">
+                    <div class="top-seksi-rank">${medals[idx]}</div>
+                    <div class="top-seksi-info">
+                        <div class="top-seksi-name">${item.name}</div>
+                        <div class="top-seksi-bar">
+                            <div class="top-seksi-bar-fill" style="width: ${item.percentage}%;"></div>
+                        </div>
+                        <div class="top-seksi-percent">${item.percentage}% dari total tamu</div>
+                    </div>
+                    <div class="top-seksi-count">${item.count}</div>
+                </div>
+            `).join('');
+        } else {
+            topSeksiSection.classList.add('hidden');
+        }
+        
+        // === Section 5: Detail Lengkap per Seksi (Admin Utama Only) ===
+        const sectionStats = document.getElementById('sectionStats');
+        if (currentUser.role === 'admin_utama' && data.perSeksi && Object.keys(data.perSeksi).length > 0) {
+            sectionStats.classList.remove('hidden');
+            const tbody = document.querySelector('#sectionStatsTable tbody');
+            tbody.innerHTML = '';
+            
+            const sortedSeksi = Object.entries(data.perSeksi)
+                .sort((a, b) => b[1].count - a[1].count);
+            
+            let delay = 0;
+            sortedSeksi.forEach(([seksi, stats], index) => {
+                tbody.innerHTML += `
+                    <tr class="animate-fade-in" style="animation-delay: ${delay}s">
+                        <td style="text-align: center;">${index + 1}</td>
+                        <td><strong>${seksi}</strong></td>
+                        <td style="text-align: center; font-weight: bold; color: var(--kemenag-green);">${stats.count}</td>
+                        <td style="text-align: center;">${stats.percentage}%</td>
+                        <td>
+                            <div class="progress-bar-container">
+                                <div class="progress-bar-fill" style="width: ${stats.percentage}%;">
+                                    ${stats.percentage}%
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+                delay += 0.05;
+            });
+        } else if (currentUser.role === 'admin_utama') {
+            sectionStats.classList.remove('hidden');
+            const tbody = document.querySelector('#sectionStatsTable tbody');
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="5" style="text-align: center; padding: 2rem; color: #9ca3af;">
+                        <div class="empty-stats-icon">📊</div>
+                        Belum ada data tamu
+                    </td>
+                </tr>
+            `;
+        } else {
+            sectionStats.classList.add('hidden');
+        }
+        
     } catch (err) {
-        showModal('error', 'Gagal memuat statistik');
+        console.error('Error loading stats:', err);
+        showModal('error', 'Gagal memuat statistik: ' + err.message);
     } finally {
         showLoading(false);
     }
 }
 
-// === FUNGSI DETAIL STATISTIK ===
-
-// Load detail tamu hari ini
-async function loadTodayGuests() {
-    try {
-        const res = await fetch(`${API_URL}?action=getTodayGuests&role=${currentUser.role}&seksi=${currentUser.seksi || ''}`);
-        const data = await res.json();
-        
-        const list = document.getElementById('todayGuestList');
-        const badge = document.getElementById('todayCountBadge');
-        
-        if (data.status !== 'success' || !data.guests || data.guests.length === 0) {
-            list.innerHTML = `
-                <div class="detail-empty">
-                    <div class="detail-empty-icon">📭</div>
-                    <p>Belum ada tamu hari ini</p>
-                </div>
-            `;
-            badge.innerText = '0 tamu';
-            return;
+// Helper: Hitung trend perbandingan
+function calculateTrend(current, previous) {
+    if (previous === 0) {
+        if (current > 0) {
+            return {
+                class: 'trend-up',
+                icon: '📈',
+                text: `+${current} dari kemarin`
+            };
         }
-        
-        badge.innerText = `${data.guests.length} tamu`;
-        
-        list.innerHTML = data.guests.map(g => {
-            const time = new Date(g.timestamp).toLocaleTimeString('id-ID', { 
-                hour: '2-digit', 
-                minute: '2-digit' 
-            });
-            const asal = g.asal === 'Instansi' ? g.namaInstansi : 'Umum';
-            
-            return `
-                <div class="today-guest-item">
-                    <div class="guest-time">🕐 ${time}</div>
-                    <div class="guest-info">
-                        <div class="guest-name">${g.nama}</div>
-                        <div class="guest-meta">
-                            <span class="guest-meta-item">📍 ${asal}</span>
-                            <span class="guest-meta-item">📞 ${g.noHp}</span>
-                        </div>
-                    </div>
-                    <span class="guest-seksi-badge">${g.tujuan}</span>
-                </div>
-            `;
-        }).join('');
-        
-    } catch (err) {
-        console.error('Gagal memuat detail tamu hari ini:', err);
+        return {
+            class: 'trend-neutral',
+            icon: '➖',
+            text: 'Tidak ada perubahan'
+        };
+    }
+    
+    const change = ((current - previous) / previous) * 100;
+    
+    if (change > 0) {
+        return {
+            class: 'trend-up',
+            icon: '📈',
+            text: `+${change.toFixed(1)}% dari periode lalu`
+        };
+    } else if (change < 0) {
+        return {
+            class: 'trend-down',
+            icon: '📉',
+            text: `${change.toFixed(1)}% dari periode lalu`
+        };
+    } else {
+        return {
+            class: 'trend-neutral',
+            icon: '➖',
+            text: 'Tidak ada perubahan'
+        };
     }
 }
 
-// Load detail per seksi (Admin Utama)
-function loadSeksiDetail(perSeksi) {
-    const tbody = document.querySelector('#seksiDetailTable tbody');
-    const badge = document.getElementById('seksiCountBadge');
-    
-    if (!perSeksi || Object.keys(perSeksi).length === 0) {
-        tbody.innerHTML = `
-            <tr>
-                <td colspan="4" style="text-align: center; padding: 2rem; color: #999;">
-                    Belum ada data tamu
-                </td>
-            </tr>
-        `;
-        badge.innerText = '0 seksi';
-        return;
-    }
-    
-    badge.innerText = `${Object.keys(perSeksi).length} seksi`;
-    
-    // Hitung tamu hari ini per seksi
-    const todayGuests = allGuests.filter(g => {
-        const gDate = new Date(g.timestamp);
-        const now = new Date();
-        return gDate.toDateString() === now.toDateString();
-    });
-    
-    const todayPerSeksi = {};
-    todayGuests.forEach(g => {
-        todayPerSeksi[g.tujuan] = (todayPerSeksi[g.tujuan] || 0) + 1;
-    });
-    
-    // Sort by jumlah tamu (descending)
-    const sortedSeksi = Object.entries(perSeksi).sort((a, b) => b[1] - a[1]);
-    
-    tbody.innerHTML = sortedSeksi.map(([seksi, count], index) => {
-        const todayCount = todayPerSeksi[seksi] || 0;
-        return `
-            <tr class="seksi-detail-row animate-fade-in" 
-                style="animation-delay: ${index * 0.05}s"
-                onclick="showSeksiDetailModal('${seksi}', ${count}, ${todayCount})">
-                <td>${seksi}</td>
-                <td style="text-align: center;">
-                    <span class="seksi-count">${count}</span>
-                </td>
-                <td style="text-align: center;">
-                    <span class="seksi-count" style="background: ${todayCount > 0 ? 'var(--kemenag-green)' : '#ccc'}; color: white;">
-                        ${todayCount}
-                    </span>
-                </td>
-                <td style="text-align: center;">
-                    <span class="seksi-view-btn">👁️ Lihat Detail</span>
-                </td>
-            </tr>
-        `;
-    }).join('');
-}
+// ============================================
+// DATA TAMU
+// ============================================
 
-// Tampilkan modal detail per seksi
-async function showSeksiDetailModal(seksi, totalCount, todayCount) {
-    const modal = document.getElementById('seksiDetailModal');
-    const title = document.getElementById('seksiModalTitle');
-    const stats = document.getElementById('seksiModalStats');
-    const list = document.getElementById('seksiModalList');
-    
-    title.innerText = `🏢 Detail Tamu - ${seksi}`;
-    
-    stats.innerHTML = `
-        <div class="seksi-modal-stat">
-            <div class="seksi-modal-stat-value">${totalCount}</div>
-            <div class="seksi-modal-stat-label">Total Keseluruhan</div>
-        </div>
-        <div class="seksi-modal-stat">
-            <div class="seksi-modal-stat-value">${todayCount}</div>
-            <div class="seksi-modal-stat-label">Tamu Hari Ini</div>
-        </div>
-    `;
-    
-    list.innerHTML = `
-        <div class="detail-empty">
-            <div class="detail-empty-icon">⏳</div>
-            <p>Memuat data tamu...</p>
-        </div>
-    `;
-    
-    modal.classList.remove('hidden');
-    modal.classList.add('animate-fade-in');
-    document.body.style.overflow = 'hidden';
-    
-    // Load data tamu untuk seksi ini
-    try {
-        const res = await fetch(`${API_URL}?action=getGuestsBySeksi&seksi=${encodeURIComponent(seksi)}`);
-        const data = await res.json();
-        
-        if (data.status !== 'success' || !data.guests || data.guests.length === 0) {
-            list.innerHTML = `
-                <div class="detail-empty">
-                    <div class="detail-empty-icon">📭</div>
-                    <p>Belum ada tamu untuk seksi ini</p>
-                </div>
-            `;
-            return;
-        }
-        
-        list.innerHTML = data.guests.map(g => {
-            const date = new Date(g.timestamp).toLocaleString('id-ID', {
-                day: '2-digit',
-                month: 'short',
-                year: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit'
-            });
-            const asal = g.asal === 'Instansi' ? g.namaInstansi : 'Umum';
-            
-            return `
-                <div class="seksi-modal-item">
-                    <div class="seksi-modal-item-header">
-                        <span class="seksi-modal-item-name">${g.nama}</span>
-                        <span class="seksi-modal-item-time">${date}</span>
-                    </div>
-                    <div class="seksi-modal-item-detail">
-                        📍 ${asal} | 📞 ${g.noHp}<br>
-                        📝 ${g.keperluan}
-                    </div>
-                </div>
-            `;
-        }).join('');
-        
-    } catch (err) {
-        list.innerHTML = `
-            <div class="detail-empty">
-                <div class="detail-empty-icon">❌</div>
-                <p>Gagal memuat data</p>
-            </div>
-        `;
-    }
-}
-
-// Tutup modal detail seksi
-function closeSeksiModal() {
-    const modal = document.getElementById('seksiDetailModal');
-    modal.classList.add('hidden');
-    document.body.style.overflow = '';
-}
-
-// Tutup modal saat klik di luar
-document.addEventListener('click', function(e) {
-    const modal = document.getElementById('seksiDetailModal');
-    if (e.target === modal) {
-        closeSeksiModal();
-    }
-});
-
-// Tutup modal dengan tombol ESC
-document.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape') {
-        const modal = document.getElementById('seksiDetailModal');
-        if (!modal.classList.contains('hidden')) {
-            closeSeksiModal();
-        }
-    }
-});
-
-// === DATA TAMU ===
 async function loadGuests() {
     showLoading(true, "Mengambil data tamu...");
     try {
@@ -499,7 +483,6 @@ async function loadGuests() {
         allGuests = data.guests || [];
         renderGuestsTable(allGuests);
         
-        // Tampilkan filter seksi hanya untuk admin utama
         if (currentUser.role === 'admin_utama') {
             const filterSeksiRow = document.getElementById('filterSeksiRow');
             if (filterSeksiRow) filterSeksiRow.classList.remove('hidden');
@@ -554,7 +537,10 @@ function renderGuestsTable(guests) {
     });
 }
 
-// === LIGHTBOX ===
+// ============================================
+// LIGHTBOX
+// ============================================
+
 function openLightbox(imageSrc, caption) {
     const lightbox = document.getElementById('photoLightbox');
     const img = document.getElementById('lightboxImage');
@@ -582,7 +568,10 @@ document.addEventListener('keydown', function(event) {
     }
 });
 
-// === FILTER FUNCTIONS (BARU) ===
+// ============================================
+// FILTER FUNCTIONS
+// ============================================
+
 function populateYearOptions() {
     const yearSelect = document.getElementById('filterYear');
     if (!yearSelect) return;
@@ -649,7 +638,6 @@ function applyFilter() {
                     "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
     let summaryText = "";
     
-    // Filter berdasarkan Tipe Tanggal
     if (filterType === 'today') {
         filtered = filtered.filter(g => new Date(g.timestamp).toDateString() === now.toDateString());
         summaryText = `Hari Ini (${now.getDate()} ${months[now.getMonth()]} ${now.getFullYear()})`;
@@ -738,7 +726,6 @@ function applyFilter() {
         summaryText = "Semua Data";
     }
     
-    // Filter berdasarkan Seksi (hanya untuk Admin Utama)
     if (currentUser.role === 'admin_utama' && filterSeksi !== 'all') {
         filtered = filtered.filter(g => g.tujuan === filterSeksi);
         summaryText += ` | Seksi: ${filterSeksi}`;
@@ -817,7 +804,6 @@ function updatePrintHeader(filter) {
 function printReport() {
     showLoading(true, "Menyiapkan dokumen cetak...");
     
-    // Gunakan filter yang sedang aktif
     updatePrintHeaderForFilter(currentFilter.type, document.getElementById('filterSummaryText').innerText || 'Semua Data');
     
     setTimeout(() => {
@@ -826,7 +812,10 @@ function printReport() {
     }, 800);
 }
 
-// === USER MANAGEMENT ===
+// ============================================
+// USER MANAGEMENT
+// ============================================
+
 async function loadUsers() {
     showLoading(true, "Mengambil data user...");
     try {
@@ -951,7 +940,10 @@ async function saveSettings() {
     }
 }
 
-// === UTILITIES ===
+// ============================================
+// UTILITIES
+// ============================================
+
 function togglePassword() {
     const input = document.getElementById('password');
     input.type = input.type === 'password' ? 'text' : 'password';
