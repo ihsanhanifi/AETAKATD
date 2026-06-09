@@ -57,12 +57,45 @@
 
         <!-- Tab: Statistik -->
         <div id="tab-stats" class="tab-content animate-fade-in">
+            <!-- Stats Cards -->
             <div class="stats-grid" id="statsGrid"></div>
-            <div id="sectionStats" class="hidden animate-fade-in">
-                <h3 style="margin-bottom: 1rem; color: var(--kemenag-green);">Tamu per Seksi</h3>
+            
+            <!-- 🆕 Detail Tamu Hari Ini -->
+            <div class="detail-section" id="todayDetailSection">
+                <div class="detail-header">
+                    <h3 class="detail-title">
+                        <span class="detail-title-icon">📅</span>
+                        Detail Tamu Hari Ini
+                    </h3>
+                    <span class="detail-badge" id="todayCountBadge">0 tamu</span>
+                </div>
+                <div id="todayGuestList" class="today-guest-list">
+                    <div class="detail-empty">
+                        <div class="detail-empty-icon">⏳</div>
+                        <p>Memuat data...</p>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 🆕 Detail Tamu per Seksi (Admin Utama Only) -->
+            <div class="detail-section admin-only hidden" id="seksiDetailSection">
+                <div class="detail-header">
+                    <h3 class="detail-title">
+                        <span class="detail-title-icon">🏢</span>
+                        Detail Tamu per Seksi
+                    </h3>
+                    <span class="detail-badge" id="seksiCountBadge">0 seksi</span>
+                </div>
                 <div class="table-responsive">
-                    <table id="sectionStatsTable">
-                        <thead><tr><th>Seksi</th><th>Jumlah Tamu</th></tr></thead>
+                    <table class="seksi-detail-table" id="seksiDetailTable">
+                        <thead>
+                            <tr>
+                                <th>Nama Seksi</th>
+                                <th style="text-align: center;">Jumlah Tamu</th>
+                                <th style="text-align: center;">Hari Ini</th>
+                                <th style="text-align: center;">Aksi</th>
+                            </tr>
+                        </thead>
                         <tbody></tbody>
                     </table>
                 </div>
@@ -287,6 +320,21 @@
                     🚪 Logout Sekarang
                 </button>
             </div>
+        </div>
+    </div>
+
+    <!-- Modal Detail per Seksi -->
+    <div id="seksiDetailModal" class="modal hidden" style="z-index: 10001;">
+        <div class="modal-content seksi-modal-content">
+            <div class="seksi-modal-header">
+                <div class="seksi-modal-title" id="seksiModalTitle">Detail Tamu</div>
+                <button class="seksi-modal-close" onclick="closeSeksiModal()">×</button>
+            </div>
+            
+            <div class="seksi-modal-stats" id="seksiModalStats"></div>
+            
+            <h4 style="margin-bottom: 0.75rem; color: var(--kemenag-green);">📋 Daftar Tamu</h4>
+            <div class="seksi-modal-list" id="seksiModalList"></div>
         </div>
     </div>
 
