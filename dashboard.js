@@ -494,12 +494,14 @@ async function loadGuests() {
     }
 }
 
+// 🆕 FUNGSI YANG SUDAH DIPERBAIKI: Tambah kolom Alamat
 function renderGuestsTable(guests) {
     const tbody = document.querySelector('#guestsTable tbody');
     tbody.innerHTML = '';
     
     if (guests.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding: 2rem;">Belum ada data tamu pada periode ini.</td></tr>';
+        // 🔄 UPDATE: colspan dari 8 menjadi 9
+        tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; padding: 2rem;">Belum ada data tamu pada periode ini.</td></tr>';
         return;
     }
     
@@ -522,12 +524,14 @@ function renderGuestsTable(guests) {
             `;
         }
         
+        // 🆕 UPDATE: Tambahkan kolom alamat di posisi ke-5 (setelah Asal)
         tbody.innerHTML += `
             <tr class="animate-fade-in" style="animation-delay: ${index * 0.05}s">
                 <td style="text-align: center;">${index + 1}</td>
                 <td>${date}</td>
                 <td>${g.nama}</td>
                 <td>${g.asal === 'Instansi' ? g.namaInstansi : 'Umum'}</td>
+                <td>${g.alamat || '-'}</td>
                 <td>${g.tujuan}</td>
                 <td>${g.keperluan}</td>
                 <td>${g.noHp}</td>
