@@ -13,6 +13,10 @@ const WARNING_BEFORE = 30000; // Warning muncul 30 detik sebelum logout
 let lastActivityTime = Date.now();
 let mouseMoveThrottle = null;
 
+// 🆕 VARIABEL AUTO-REFRESH
+let statsRefreshInterval = null;
+const STATS_REFRESH_INTERVAL = 60000; // Refresh statistik setiap 60 detik
+
 // === INISIALISASI ===
 document.addEventListener('DOMContentLoaded', () => {
     updateDateTime();
@@ -38,15 +42,34 @@ document.addEventListener('DOMContentLoaded', () => {
     if (filterMonth) filterMonth.value = today.substring(0, 7);
 });
 
+// 🆕 FUNGSI UPDATE DATETIME DENGAN ANIMASI
 function updateDateTime() {
     const now = new Date();
-    const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' };
+    const options = { 
+        weekday: 'long', 
+        year: 'numeric', 
+        month: 'long', 
+        day: 'numeric', 
+        hour: '2-digit', 
+        minute: '2-digit', 
+        second: '2-digit' 
+    };
     const el = document.getElementById('currentDateTime');
-    if (el) el.innerText = now.toLocaleDateString('id-ID', options);
+    if (el) {
+        el.innerText = now.toLocaleDateString('id-ID', options);
+        
+        // 🆕 Trigger animasi pulse setiap detik
+        el.classList.remove('animate-pulse-once');
+        void el.offsetWidth; // Force reflow untuk restart animasi
+        el.classList.add('animate-pulse-once');
+    }
 }
 
 function toggleMobileMenu() {
-    document.getElementById('mobileNavTabs').classList.toggle('active');
+    const navTabs = document.getElementById('mobileNavTabs');
+    if (navTabs) {
+        navTabs.classList.toggle('active');
+    }
 }
 
 // === LOGIN ===
@@ -58,18 +81,25 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
     const password = document.getElementById('password').value;
 
     try {
-        const res = await fetch(`${API_URL}?action=login&username=${username}&password=${password}`);
+        const res = await fetch(`${API_URL}?action=login&username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`);
         const data = await res.json();
         
         if (data.status === 'success') {
             currentUser = data.user;
             localStorage.setItem('etamu_user', JSON.stringify(currentUser));
-            showDashboard();
+            
+            // 🆕 Animasi sukses sebelum masuk dashboard
+            showModal('success', `Selamat datang, ${currentUser.username}!`);
+            setTimeout(() => {
+                closeModal();
+                showDashboard();
+            }, 1000);
         } else {
             showModal('error', 'Username atau password salah!');
         }
     } catch (err) {
-        showModal('error', 'Gagal terhubung ke server.');
+        console.error('Login error:', err);
+        showModal('error', 'Gagal terhubung ke server. Periksa koneksi internet Anda.');
     } finally {
         showLoading(false);
     }
@@ -79,15 +109,28 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
 function showDashboard() {
     document.getElementById('loginSection').classList.add('hidden');
     document.getElementById('dashboardSection').classList.remove('hidden');
-    document.getElementById('userInfo').innerText = `${currentUser.username} (${currentUser.role === 'admin_utama' ? 'Admin Utama' : 'Admin Seksi: ' + currentUser.seksi})`;
+    
+    // 🆕 Trigger animasi header saat dashboard muncul
+    const dashboardSection = document.getElementById('dashboardSection');
+    dashboardSection.classList.add('animate-fade-in');
+    
+    const userInfoEl = document.getElementById('userInfo');
+    if (userInfoEl) {
+        userInfoEl.innerText = `${currentUser.username} (${currentUser.role === 'admin_utama' ? 'Admin Utama' : 'Admin Seksi: ' + currentUser.seksi})`;
+    }
     
     if (currentUser.role === 'admin_utama') {
         document.querySelectorAll('.admin-only').forEach(el => el.classList.remove('hidden'));
-        document.getElementById('guestTableTitle').innerText = 'Daftar Seluruh Tamu';
-        document.getElementById('printTitle').innerText = 'Laporan Data Tamu Kementerian Agama Kab. Tanah Datar';
+        const guestTableTitle = document.getElementById('guestTableTitle');
+        if (guestTableTitle) guestTableTitle.innerText = 'Daftar Seluruh Tamu';
+        const printTitle = document.getElementById('printTitle');
+        if (printTitle) printTitle.innerText = 'Laporan Data Tamu Kementerian Agama Kab. Tanah Datar';
     } else {
-        document.getElementById('guestTableTitle').innerText = `Daftar Tamu Seksi: ${currentUser.seksi}`;
-        document.getElementById('printTitle').innerText = `Laporan Data Tamu Seksi ${currentUser.seksi}`;
+        document.querySelectorAll('.admin-only').forEach(el => el.classList.add('hidden'));
+        const guestTableTitle = document.getElementById('guestTableTitle');
+        if (guestTableTitle) guestTableTitle.innerText = `Daftar Tamu Seksi: ${currentUser.seksi}`;
+        const printTitle = document.getElementById('printTitle');
+        if (printTitle) printTitle.innerText = `Laporan Data Tamu Seksi ${currentUser.seksi}`;
     }
     
     loadStats();
@@ -96,6 +139,66 @@ function showDashboard() {
 
     // Mulai monitoring idle
     startIdleMonitoring();
+    
+    // 🆕 Mulai auto-refresh statistik
+    startStatsAutoRefresh();
+}
+
+// 🆕 AUTO-REFRESH STATISTIK
+function startStatsAutoRefresh() {
+    if (statsRefreshInterval) {
+        clearInterval(statsRefreshInterval);
+    }
+    
+    statsRefreshInterval = setInterval(() => {
+        // Hanya refresh jika tab statistik yang aktif
+        const statsTab = document.getElementById('tab-stats');
+        if (statsTab && !statsTab.classList.contains('hidden')) {
+            loadStatsSilent(); // Refresh tanpa loading overlay
+        }
+    }, STATS_REFRESH_INTERVAL);
+}
+
+function stopStatsAutoRefresh() {
+    if (statsRefreshInterval) {
+        clearInterval(statsRefreshInterval);
+        statsRefreshInterval = null;
+    }
+}
+
+// 🆕 LOAD STATS TANPA LOADING OVERLAY (untuk auto-refresh)
+async function loadStatsSilent() {
+    try {
+        const res = await fetch(`${API_URL}?action=getDetailedStats&role=${currentUser.role}&seksi=${currentUser.seksi || ''}`);
+        const data = await res.json();
+        
+        if (data.status !== 'success') return;
+        
+        // Update hanya angka-angka tanpa animasi ulang
+        updateStatCardValue('statsGrid', 0, data.today);
+        updateStatCardValue('statsGrid', 1, data.total);
+        updateStatCardValue('statsGrid', 2, data.averagePerDay);
+        updateStatCardValue('statsGrid', 3, data.thisMonth);
+        
+    } catch (err) {
+        console.error('Silent stats refresh error:', err);
+    }
+}
+
+function updateStatCardValue(gridId, index, value) {
+    const grid = document.getElementById(gridId);
+    if (!grid) return;
+    
+    const cards = grid.querySelectorAll('.stat-card');
+    if (cards[index]) {
+        const h3 = cards[index].querySelector('h3');
+        if (h3 && h3.innerText !== value.toString()) {
+            h3.innerText = value;
+            // 🆕 Animasi flash saat nilai berubah
+            cards[index].classList.add('stat-flash');
+            setTimeout(() => cards[index].classList.remove('stat-flash'), 1000);
+        }
+    }
 }
 
 // === IDLE MONITORING (AUTO LOGOUT) ===
@@ -152,16 +255,18 @@ function resetIdleTimer() {
 
 function showIdleWarning() {
     const modal = document.getElementById('idleWarningModal');
+    if (!modal) return;
+    
     modal.classList.remove('hidden');
     modal.classList.add('animate-fade-in');
     
     countdownValue = WARNING_BEFORE / 1000;
     const countdownEl = document.getElementById('idleCountdown');
-    countdownEl.innerText = countdownValue;
+    if (countdownEl) countdownEl.innerText = countdownValue;
     
     countdownTimer = setInterval(() => {
         countdownValue--;
-        countdownEl.innerText = countdownValue;
+        if (countdownEl) countdownEl.innerText = countdownValue;
         
         if (countdownValue <= 0) {
             performIdleLogout();
@@ -171,7 +276,7 @@ function showIdleWarning() {
 
 function hideIdleWarning() {
     const modal = document.getElementById('idleWarningModal');
-    modal.classList.add('hidden');
+    if (modal) modal.classList.add('hidden');
     
     if (countdownTimer) {
         clearInterval(countdownTimer);
@@ -183,52 +288,74 @@ function hideIdleWarning() {
 
 function continueSession() {
     hideIdleWarning();
-    showModal('success', 'Sesi dilanjutkan. Anda masih login.');
+    showModal('success', '✅ Sesi dilanjutkan. Anda masih login.');
 }
 
 function performIdleLogout() {
     stopIdleMonitoring();
+    stopStatsAutoRefresh();
     
     const modal = document.getElementById('idleWarningModal');
-    modal.classList.add('hidden');
+    if (modal) modal.classList.add('hidden');
     
     showLoading(true, "Mengakhiri sesi karena tidak aktif...");
     
     setTimeout(() => {
         showLoading(false);
         localStorage.removeItem('etamu_user');
-        showModal('success', 'Sesi Anda telah berakhir karena tidak aktif. Silakan login kembali.');
+        showModal('info', '⏰ Sesi Anda telah berakhir karena tidak aktif. Silakan login kembali.');
         
         setTimeout(() => {
+            closeModal();
             currentUser = null;
-            document.getElementById('dashboardSection').classList.add('hidden');
-            document.getElementById('loginSection').classList.remove('hidden');
-            document.getElementById('username').value = '';
-            document.getElementById('password').value = '';
-        }, 500);
+            const dashboardSection = document.getElementById('dashboardSection');
+            const loginSection = document.getElementById('loginSection');
+            if (dashboardSection) dashboardSection.classList.add('hidden');
+            if (loginSection) loginSection.classList.remove('hidden');
+            
+            const usernameInput = document.getElementById('username');
+            const passwordInput = document.getElementById('password');
+            if (usernameInput) usernameInput.value = '';
+            if (passwordInput) passwordInput.value = '';
+        }, 2000);
     }, 1000);
 }
 
+// 🆕 LOGOUT DENGAN KONFIRMASI
 function logout() {
+    if (!confirm('🚪 Apakah Anda yakin ingin logout?')) {
+        return;
+    }
+    
     stopIdleMonitoring();
+    stopStatsAutoRefresh();
     showLoading(true, "Logging out...");
+    
     setTimeout(() => {
         localStorage.removeItem('etamu_user');
+        showLoading(false);
         location.reload();
     }, 500);
 }
 
 function switchTab(tabName, btnElement) {
-    document.getElementById('mobileNavTabs').classList.remove('active');
+    const mobileNavTabs = document.getElementById('mobileNavTabs');
+    if (mobileNavTabs) mobileNavTabs.classList.remove('active');
     
     document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
     const target = document.getElementById(`tab-${tabName}`);
-    target.classList.remove('hidden');
-    target.classList.add('animate-fade-in');
+    if (target) {
+        target.classList.remove('hidden');
+        // 🆕 Animasi masuk yang lebih halus
+        target.classList.remove('animate-fade-in');
+        void target.offsetWidth; // Force reflow
+        target.classList.add('animate-fade-in');
+    }
     
     document.querySelectorAll('.nav-tab').forEach(el => el.classList.remove('active'));
     if (btnElement) btnElement.classList.add('active');
     
+    // Load data sesuai tab
     if (tabName === 'guests') loadGuests();
     if (tabName === 'stats') loadStats();
     if (tabName === 'users') loadUsers();
@@ -249,8 +376,21 @@ async function loadStats() {
             return;
         }
         
-        // === Section 1: 4 Kartu Statistik Utama ===
-        const grid = document.getElementById('statsGrid');
+        renderStatsDashboard(data);
+        
+    } catch (err) {
+        console.error('Error loading stats:', err);
+        showModal('error', 'Gagal memuat statistik: ' + err.message);
+    } finally {
+        showLoading(false);
+    }
+}
+
+// 🆕 FUNGSI TERPISAH UNTUK RENDER STATS (bisa digunakan ulang)
+function renderStatsDashboard(data) {
+    // === Section 1: 4 Kartu Statistik Utama ===
+    const grid = document.getElementById('statsGrid');
+    if (grid) {
         grid.innerHTML = `
             <div class="stat-card animate-slide-up">
                 <div class="stat-icon">📅</div>
@@ -273,9 +413,11 @@ async function loadStats() {
                 <p>Tamu Bulan Ini</p>
             </div>
         `;
-        
-        // === Section 2: Perbandingan Periode ===
-        const comparisonGrid = document.getElementById('comparisonGrid');
+    }
+    
+    // === Section 2: Perbandingan Periode ===
+    const comparisonGrid = document.getElementById('comparisonGrid');
+    if (comparisonGrid) {
         const dailyTrend = calculateTrend(data.today, data.yesterday);
         const weeklyTrend = calculateTrend(data.thisWeek, data.lastWeek);
         
@@ -327,12 +469,14 @@ async function loadStats() {
                 </div>
             </div>
         `;
-        
-        // === Section 3: Breakdown Asal Tamu (Admin Utama Only) ===
-        const asalSection = document.getElementById('asalBreakdownSection');
-        if (currentUser.role === 'admin_utama') {
-            asalSection.classList.remove('hidden');
-            const asalBreakdown = document.getElementById('asalBreakdown');
+    }
+    
+    // === Section 3: Breakdown Asal Tamu (Admin Utama Only) ===
+    const asalSection = document.getElementById('asalBreakdownSection');
+    if (currentUser.role === 'admin_utama' && asalSection) {
+        asalSection.classList.remove('hidden');
+        const asalBreakdown = document.getElementById('asalBreakdown');
+        if (asalBreakdown) {
             const totalAsal = data.instansiCount + data.umumCount;
             const instansiPercent = totalAsal > 0 ? ((data.instansiCount / totalAsal) * 100).toFixed(1) : 0;
             const umumPercent = totalAsal > 0 ? ((data.umumCount / totalAsal) * 100).toFixed(1) : 0;
@@ -351,16 +495,17 @@ async function loadStats() {
                     <div class="asal-percent">${umumPercent}%</div>
                 </div>
             `;
-        } else {
-            asalSection.classList.add('hidden');
         }
-        
-        // === Section 4: Top 5 Seksi Teramai (Admin Utama Only) ===
-        const topSeksiSection = document.getElementById('topSeksiSection');
-        if (currentUser.role === 'admin_utama' && data.topSeksi && data.topSeksi.length > 0) {
-            topSeksiSection.classList.remove('hidden');
-            const topSeksiContainer = document.getElementById('topSeksiContainer');
-            
+    } else if (asalSection) {
+        asalSection.classList.add('hidden');
+    }
+    
+    // === Section 4: Top 5 Seksi Teramai (Admin Utama Only) ===
+    const topSeksiSection = document.getElementById('topSeksiSection');
+    if (currentUser.role === 'admin_utama' && data.topSeksi && data.topSeksi.length > 0 && topSeksiSection) {
+        topSeksiSection.classList.remove('hidden');
+        const topSeksiContainer = document.getElementById('topSeksiContainer');
+        if (topSeksiContainer) {
             const medals = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣'];
             topSeksiContainer.innerHTML = data.topSeksi.map((item, idx) => `
                 <div class="top-seksi-item rank-${item.rank} animate-fade-in" style="animation-delay: ${idx * 0.1}s;">
@@ -375,15 +520,17 @@ async function loadStats() {
                     <div class="top-seksi-count">${item.count}</div>
                 </div>
             `).join('');
-        } else {
-            topSeksiSection.classList.add('hidden');
         }
-        
-        // === Section 5: Detail Lengkap per Seksi (Admin Utama Only) ===
-        const sectionStats = document.getElementById('sectionStats');
-        if (currentUser.role === 'admin_utama' && data.perSeksi && Object.keys(data.perSeksi).length > 0) {
-            sectionStats.classList.remove('hidden');
-            const tbody = document.querySelector('#sectionStatsTable tbody');
+    } else if (topSeksiSection) {
+        topSeksiSection.classList.add('hidden');
+    }
+    
+    // === Section 5: Detail Lengkap per Seksi (Admin Utama Only) ===
+    const sectionStats = document.getElementById('sectionStats');
+    if (currentUser.role === 'admin_utama' && data.perSeksi && Object.keys(data.perSeksi).length > 0 && sectionStats) {
+        sectionStats.classList.remove('hidden');
+        const tbody = document.querySelector('#sectionStatsTable tbody');
+        if (tbody) {
             tbody.innerHTML = '';
             
             const sortedSeksi = Object.entries(data.perSeksi)
@@ -408,9 +555,11 @@ async function loadStats() {
                 `;
                 delay += 0.05;
             });
-        } else if (currentUser.role === 'admin_utama') {
-            sectionStats.classList.remove('hidden');
-            const tbody = document.querySelector('#sectionStatsTable tbody');
+        }
+    } else if (currentUser.role === 'admin_utama' && sectionStats) {
+        sectionStats.classList.remove('hidden');
+        const tbody = document.querySelector('#sectionStatsTable tbody');
+        if (tbody) {
             tbody.innerHTML = `
                 <tr>
                     <td colspan="5" style="text-align: center; padding: 2rem; color: #9ca3af;">
@@ -419,15 +568,9 @@ async function loadStats() {
                     </td>
                 </tr>
             `;
-        } else {
-            sectionStats.classList.add('hidden');
         }
-        
-    } catch (err) {
-        console.error('Error loading stats:', err);
-        showModal('error', 'Gagal memuat statistik: ' + err.message);
-    } finally {
-        showLoading(false);
+    } else if (sectionStats) {
+        sectionStats.classList.add('hidden');
     }
 }
 
@@ -488,19 +631,20 @@ async function loadGuests() {
             if (filterSeksiRow) filterSeksiRow.classList.remove('hidden');
         }
     } catch (err) {
+        console.error('Error loading guests:', err);
         showModal('error', 'Gagal memuat data tamu');
     } finally {
         showLoading(false);
     }
 }
 
-// 🆕 FUNGSI YANG SUDAH DIPERBAIKI: Tambah kolom Alamat
 function renderGuestsTable(guests) {
     const tbody = document.querySelector('#guestsTable tbody');
+    if (!tbody) return;
+    
     tbody.innerHTML = '';
     
     if (guests.length === 0) {
-        // 🔄 UPDATE: colspan dari 8 menjadi 9
         tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; padding: 2rem;">Belum ada data tamu pada periode ini.</td></tr>';
         return;
     }
@@ -524,7 +668,6 @@ function renderGuestsTable(guests) {
             `;
         }
         
-        // 🆕 UPDATE: Tambahkan kolom alamat di posisi ke-5 (setelah Asal)
         tbody.innerHTML += `
             <tr class="animate-fade-in" style="animation-delay: ${index * 0.05}s">
                 <td style="text-align: center;">${index + 1}</td>
@@ -550,6 +693,8 @@ function openLightbox(imageSrc, caption) {
     const img = document.getElementById('lightboxImage');
     const cap = document.getElementById('lightboxCaption');
     
+    if (!lightbox || !img || !cap) return;
+    
     img.src = imageSrc;
     cap.innerText = caption;
     lightbox.classList.remove('hidden');
@@ -562,8 +707,10 @@ function closeLightbox(event) {
     }
     
     const lightbox = document.getElementById('photoLightbox');
-    lightbox.classList.add('hidden');
-    document.body.style.overflow = '';
+    if (lightbox) {
+        lightbox.classList.add('hidden');
+        document.body.style.overflow = '';
+    }
 }
 
 document.addEventListener('keydown', function(event) {
@@ -781,7 +928,8 @@ function updatePrintHeaderForFilter(filterType, summaryText) {
         periodText = summaryText;
     }
     
-    document.getElementById('printPeriod').innerText = periodText;
+    const printPeriod = document.getElementById('printPeriod');
+    if (printPeriod) printPeriod.innerText = periodText;
 }
 
 function updatePrintHeader(filter) {
@@ -802,13 +950,15 @@ function updatePrintHeader(filter) {
         periodText = `Laporan Keseluruhan - Dicetak pada: ${now.getDate()} ${months[now.getMonth()]} ${now.getFullYear()}`;
     }
 
-    document.getElementById('printPeriod').innerText = periodText;
+    const printPeriod = document.getElementById('printPeriod');
+    if (printPeriod) printPeriod.innerText = periodText;
 }
 
 function printReport() {
     showLoading(true, "Menyiapkan dokumen cetak...");
     
-    updatePrintHeaderForFilter(currentFilter.type, document.getElementById('filterSummaryText').innerText || 'Semua Data');
+    const filterSummaryText = document.getElementById('filterSummaryText');
+    updatePrintHeaderForFilter(currentFilter.type, filterSummaryText ? filterSummaryText.innerText : 'Semua Data');
     
     setTimeout(() => {
         showLoading(false);
@@ -828,6 +978,8 @@ async function loadUsers() {
         allUsers = data.users || [];
         
         const tbody = document.querySelector('#usersTable tbody');
+        if (!tbody) return;
+        
         tbody.innerHTML = '';
         allUsers.forEach((u, index) => {
             tbody.innerHTML += `
@@ -842,6 +994,9 @@ async function loadUsers() {
                 </tr>
             `;
         });
+    } catch (err) {
+        console.error('Error loading users:', err);
+        showModal('error', 'Gagal memuat data user');
     } finally {
         showLoading(false);
     }
@@ -855,6 +1010,8 @@ function editUser(username) {
 
 function showUserModal(user = null) {
     const modal = document.getElementById('userModal');
+    if (!modal) return;
+    
     modal.classList.remove('hidden');
     modal.classList.add('animate-fade-in');
     
@@ -879,21 +1036,25 @@ function showUserModal(user = null) {
 }
 
 function closeUserModal() {
-    document.getElementById('userModal').classList.add('hidden');
+    const modal = document.getElementById('userModal');
+    if (modal) modal.classList.add('hidden');
 }
 
 function toggleSeksiInput() {
     const role = document.getElementById('newRole').value;
+    const seksiInputGroup = document.getElementById('seksiInputGroup');
+    if (!seksiInputGroup) return;
+    
     if (role === 'admin_seksi') {
-        document.getElementById('seksiInputGroup').classList.remove('hidden');
-        document.getElementById('seksiInputGroup').classList.add('animate-fade-in');
+        seksiInputGroup.classList.remove('hidden');
+        seksiInputGroup.classList.add('animate-fade-in');
     } else {
-        document.getElementById('seksiInputGroup').classList.add('hidden');
+        seksiInputGroup.classList.add('hidden');
     }
 }
 
 async function saveUser() {
-    const username = document.getElementById('newUsername').value;
+    const username = document.getElementById('newUsername').value.trim();
     const password = document.getElementById('newPassword').value;
     const role = document.getElementById('newRole').value;
     const seksi = role === 'admin_seksi' ? document.getElementById('newSeksi').value : '';
@@ -907,38 +1068,75 @@ async function saveUser() {
     showLoading(true, "Menyimpan data user...");
     try {
         const payload = { action: editUsername ? 'updateUser' : 'addUser', username, password, role, seksi, editUsername };
-        await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload) });
-        showModal('success', 'User berhasil disimpan!');
-        closeUserModal();
-        loadUsers();
+        const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload) });
+        const result = await res.json();
+        
+        if (result.status === 'success') {
+            showModal('success', 'User berhasil disimpan!');
+            closeUserModal();
+            loadUsers();
+        } else {
+            showModal('error', result.message || 'Gagal menyimpan user');
+        }
+    } catch (err) {
+        console.error('Error saving user:', err);
+        showModal('error', 'Gagal menyimpan data user');
     } finally {
         showLoading(false);
     }
 }
 
 async function deleteUser(username) {
-    if (!confirm(`Yakin ingin menghapus user ${username}?`)) return;
+    if (!confirm(`🗑️ Yakin ingin menghapus user "${username}"?`)) return;
+    
     showLoading(true, "Menghapus data user...");
     try {
-        await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'deleteUser', username }) });
-        showModal('success', 'User berhasil dihapus!');
-        loadUsers();
+        const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'deleteUser', username }) });
+        const result = await res.json();
+        
+        if (result.status === 'success') {
+            showModal('success', 'User berhasil dihapus!');
+            loadUsers();
+        } else {
+            showModal('error', result.message || 'Gagal menghapus user');
+        }
+    } catch (err) {
+        console.error('Error deleting user:', err);
+        showModal('error', 'Gagal menghapus data user');
     } finally {
         showLoading(false);
     }
 }
 
 async function saveSettings() {
-    const bgUrl = document.getElementById('bgUrlInput').value;
+    const bgUrl = document.getElementById('bgUrlInput').value.trim();
     if (!bgUrl) {
         showModal('error', 'URL Background tidak boleh kosong');
         return;
     }
+    
+    // Validasi URL
+    try {
+        new URL(bgUrl);
+    } catch (err) {
+        showModal('error', 'URL tidak valid. Pastikan format URL benar (https://...)');
+        return;
+    }
+    
     showLoading(true, "Menyimpan pengaturan...");
     try {
-        await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'saveSetting', key: 'bg_image', value: bgUrl }) });
-        document.documentElement.style.setProperty('--bg-image', `url('${bgUrl}')`);
-        showModal('success', 'Pengaturan background berhasil disimpan!');
+        const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'saveSetting', key: 'bg_image', value: bgUrl }) });
+        const result = await res.json();
+        
+        if (result.status === 'success') {
+            document.documentElement.style.setProperty('--bg-image', `url('${bgUrl}')`);
+            showModal('success', '✅ Pengaturan background berhasil disimpan!');
+        } else {
+            showModal('error', result.message || 'Gagal menyimpan pengaturan');
+        }
+    } catch (err) {
+        console.error('Error saving settings:', err);
+        showModal('error', 'Gagal menyimpan pengaturan');
     } finally {
         showLoading(false);
     }
@@ -950,24 +1148,53 @@ async function saveSettings() {
 
 function togglePassword() {
     const input = document.getElementById('password');
-    input.type = input.type === 'password' ? 'text' : 'password';
+    if (input) {
+        input.type = input.type === 'password' ? 'text' : 'password';
+    }
 }
 
 function showLoading(show, text = "Loading / Mengambil data...") {
-    const textEl = document.getElementById('loadingOverlay').querySelector('.loading-text');
+    const loadingOverlay = document.getElementById('loadingOverlay');
+    if (!loadingOverlay) return;
+    
+    const textEl = loadingOverlay.querySelector('.loading-text');
     if (textEl) textEl.innerText = text;
-    if (show) document.getElementById('loadingOverlay').classList.remove('hidden');
-    else document.getElementById('loadingOverlay').classList.add('hidden');
+    
+    if (show) {
+        loadingOverlay.classList.remove('hidden');
+    } else {
+        loadingOverlay.classList.add('hidden');
+    }
 }
 
 function showModal(type, message) {
     const modal = document.getElementById('notificationModal');
+    if (!modal) return;
+    
     modal.className = `modal ${type} animate-fade-in`;
-    document.getElementById('modalTitle').innerText = type === 'success' ? 'Berhasil' : 'Gagal';
-    document.getElementById('modalMessage').innerText = message;
+    
+    const modalTitle = document.getElementById('modalTitle');
+    const modalMessage = document.getElementById('modalMessage');
+    
+    if (modalTitle) {
+        if (type === 'success') modalTitle.innerText = '✅ Berhasil';
+        else if (type === 'error') modalTitle.innerText = '❌ Gagal';
+        else if (type === 'info') modalTitle.innerText = 'ℹ️ Informasi';
+        else modalTitle.innerText = 'Notifikasi';
+    }
+    
+    if (modalMessage) modalMessage.innerText = message;
+    
     modal.classList.remove('hidden');
 }
 
 function closeModal() {
-    document.getElementById('notificationModal').classList.add('hidden');
+    const modal = document.getElementById('notificationModal');
+    if (modal) modal.classList.add('hidden');
 }
+
+// 🆕 CLEANUP saat halaman ditutup
+window.addEventListener('beforeunload', () => {
+    stopIdleMonitoring();
+    stopStatsAutoRefresh();
+});
