@@ -1,4 +1,4 @@
-const API_URL = 'https://script.google.com/macros/s/AKfycbwnT4kw4BC60Mu1Bve525ARoilh-6I5aGdDFGOXVRMb1ypzxhROah2_ojrP2gqpWRw1/exec';
+const API_URL = 'https://script.google.com/macros/s/AKfycbwnT4kw4BC60Mu1Bve525ARoilh-6I5aGdDFGOXVRMb1ypzxhROah2_ojrP2gqpWRw1/exechttps://script.google.com/macros/s/AKfycbwnT4kw4BC60Mu1Bve525ARoilh-6I5aGdDFGOXVRMb1ypzxhROah2_ojrP2gqpWRw1/exec';
 
 // === ELEMEN DOM ===
 const guestForm = document.getElementById('guestForm');
@@ -14,10 +14,10 @@ const cameraPlaceholder = document.getElementById('cameraPlaceholder');
 const videoElement = document.getElementById('videoElement');
 const canvasElement = document.getElementById('canvasElement');
 const photoPreview = document.getElementById('photoPreview');
-const btnStartCamera = document.getElementById('btnStartCamera');
-const btnCapture = document.getElementById('btnCapture');
-const btnRetake = document.getElementById('btnRetake');
 const fotoSelfieInput = document.getElementById('fotoSelfie');
+const cameraOverlay = document.getElementById('cameraOverlay');
+const cameraOverlayIcon = document.getElementById('cameraOverlayIcon');
+const cameraOverlayText = document.getElementById('cameraOverlayText');
 
 // Elemen Autocomplete
 const namaInput = document.getElementById('nama');
@@ -29,10 +29,11 @@ let stream = null;
 let guestNamesData = [];
 let autocompleteIndex = -1;
 let debounceTimer = null;
+let cameraState = 'idle'; // 'idle', 'active', 'captured'
 
-// === INISIALISASI SAAT HALAMAN DIMUAT ===
+// === INISIALISASI ===
 document.addEventListener('DOMContentLoaded', () => {
-    loadGuestNames(); // 🆕 PANGGIL FUNGSI INI agar autocomplete berfungsi
+    loadGuestNames();
 });
 
 // === TOGGLE INSTANSI INPUT ===
@@ -48,31 +49,100 @@ asalSelect.addEventListener('change', function() {
     }
 });
 
-// === KAMERA FUNCTIONS ===
+// ============================================
+// KAMERA INTERAKTIF (TAP LANGSUNG DI AREA)
+// ============================================
 
-// 1. Aktifkan Kamera
-btnStartCamera.addEventListener('click', async () => {
-    showLoading(true, "Mengaktifkan kamera...");
-    try {
-        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
-        videoElement.srcObject = stream;
-        
-        cameraPlaceholder.classList.add('hidden');
-        videoElement.classList.remove('hidden');
-        cameraBox.classList.add('active');
-        
-        btnStartCamera.classList.add('hidden');
-        btnCapture.classList.remove('hidden');
-        btnCapture.classList.add('animate-fade-in');
-    } catch (err) {
-        showModal('error', 'Gagal mengakses kamera. Pastikan izin kamera diberikan.');
-    } finally {
-        showLoading(false);
+// Klik placeholder untuk mulai kamera
+cameraPlaceholder.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    if (cameraState === 'idle') {
+        await startCamera();
     }
 });
 
-// 2. Ambil Foto
-btnCapture.addEventListener('click', () => {
+// Klik video untuk ambil foto
+videoElement.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (cameraState === 'active') {
+        capturePhoto();
+    }
+});
+
+// Klik preview untuk ulangi
+photoPreview.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (cameraState === 'captured') {
+        retakePhoto();
+    }
+});
+
+// 🆕 Klik cameraBox sebagai fallback (jika user tap di area kosong)
+cameraBox.addEventListener('click', async (e) => {
+    // Hanya trigger jika yang diklik adalah cameraBox itu sendiri (bukan child)
+    if (e.target === cameraBox) {
+        if (cameraState === 'idle') {
+            await startCamera();
+        } else if (cameraState === 'active') {
+            capturePhoto();
+        } else if (cameraState === 'captured') {
+            retakePhoto();
+        }
+    }
+});
+
+// Fungsi mulai kamera
+async function startCamera() {
+    showLoading(true, "Mengaktifkan kamera...");
+    try {
+        stream = await navigator.mediaDevices.getUserMedia({ 
+            video: { 
+                facingMode: "user",
+                width: { ideal: 640 },
+                height: { ideal: 480 }
+            } 
+        });
+        videoElement.srcObject = stream;
+        
+        // 🆕 Pastikan semua elemen dalam state yang benar
+        cameraPlaceholder.classList.add('hidden');
+        photoPreview.classList.add('hidden'); // 🆕 FIX: Sembunyikan preview jika ada
+        videoElement.classList.remove('hidden');
+        cameraBox.classList.add('active');
+        
+        // Tampilkan overlay dengan instruksi
+        cameraOverlay.classList.remove('hidden');
+        cameraOverlayIcon.innerText = '📸';
+        cameraOverlayText.innerText = 'Tap untuk ambil foto';
+        
+        cameraState = 'active';
+        
+        // 🆕 Flash effect saat kamera nyala
+        flashCameraBox();
+    } catch (err) {
+        console.error('Camera error:', err);
+        let errorMsg = 'Gagal mengakses kamera. ';
+        if (err.name === 'NotAllowedError') {
+            errorMsg += 'Izin kamera ditolak. Silakan izinkan akses kamera di browser Anda.';
+        } else if (err.name === 'NotFoundError') {
+            errorMsg += 'Kamera tidak ditemukan pada perangkat ini.';
+        } else {
+            errorMsg += 'Pastikan izin kamera diberikan.';
+        }
+        showModal('error', errorMsg);
+    } finally {
+        showLoading(false);
+    }
+}
+
+// Fungsi ambil foto
+function capturePhoto() {
+    // 🆕 Validasi video sudah siap
+    if (videoElement.readyState < 2) {
+        showModal('error', 'Kamera belum siap. Silakan coba lagi.');
+        return;
+    }
+    
     canvasElement.width = videoElement.videoWidth;
     canvasElement.height = videoElement.videoHeight;
     canvasElement.getContext('2d').drawImage(videoElement, 0, 0);
@@ -81,51 +151,75 @@ btnCapture.addEventListener('click', () => {
     fotoSelfieInput.value = base64Image;
     photoPreview.src = base64Image;
     
+    // 🆕 Atur tampilan dengan urutan yang benar
     videoElement.classList.add('hidden');
     photoPreview.classList.remove('hidden');
     photoPreview.classList.add('animate-fade-in');
     
-    stream.getTracks().forEach(track => track.stop());
+    // Hentikan stream kamera untuk menghemat baterai
+    if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+        stream = null;
+    }
     
-    btnCapture.classList.add('hidden');
-    btnRetake.classList.remove('hidden');
-    btnRetake.classList.add('animate-fade-in');
-});
+    // Update overlay untuk state captured
+    cameraOverlayIcon.innerText = '🔄';
+    cameraOverlayText.innerText = 'Tap untuk ulangi foto';
+    
+    cameraState = 'captured';
+    
+    // 🆕 Flash effect saat foto diambil
+    flashCameraBox();
+}
 
-// 3. Ulangi Foto
-btnRetake.addEventListener('click', () => {
+// Fungsi ulangi foto
+async function retakePhoto() {
+    // 🆕 Reset state dengan benar
     fotoSelfieInput.value = '';
+    photoPreview.src = '';
     photoPreview.classList.add('hidden');
-    videoElement.classList.remove('hidden');
-    cameraPlaceholder.classList.add('hidden');
+    photoPreview.classList.remove('animate-fade-in');
     
-    btnRetake.classList.add('hidden');
-    btnStartCamera.classList.remove('hidden');
+    videoElement.classList.add('hidden');
+    cameraOverlay.classList.add('hidden');
+    cameraBox.classList.remove('active');
     
-    btnStartCamera.click();
-});
+    cameraState = 'idle';
+    
+    // Mulai kamera lagi
+    await startCamera();
+}
 
-// === AUTOCOMPLETE & AUTO-FILL FUNCTIONS ===
+// 🆕 Fungsi flash effect untuk feedback visual
+function flashCameraBox() {
+    cameraBox.style.transition = 'none';
+    cameraBox.style.boxShadow = '0 0 0 4px var(--kemenag-gold)';
+    
+    setTimeout(() => {
+        cameraBox.style.transition = 'box-shadow 0.5s ease-out';
+        cameraBox.style.boxShadow = '';
+    }, 50);
+}
 
-// Ambil daftar nama tamu saat halaman dimuat
+// ============================================
+// AUTOCOMPLETE & AUTO-FILL
+// ============================================
+
 async function loadGuestNames() {
     try {
         const res = await fetch(`${API_URL}?action=getGuestNames`);
         const data = await res.json();
         if (data.status === 'success') {
             guestNamesData = data.names || [];
-            console.log(`✅ Berhasil memuat ${guestNamesData.length} nama tamu untuk autocomplete`);
+            console.log(`✅ Berhasil memuat ${guestNamesData.length} nama tamu`);
         }
     } catch (err) {
         console.log('⚠️ Gagal memuat daftar nama:', err);
     }
 }
 
-// Event listener untuk input nama (Autocomplete)
 namaInput.addEventListener('input', function() {
     clearTimeout(debounceTimer);
-    
-    // Sembunyikan notifikasi auto-fill saat user mulai mengetik
     autofillNotice.classList.add('hidden');
     
     debounceTimer = setTimeout(() => {
@@ -138,7 +232,6 @@ namaInput.addEventListener('input', function() {
     }, 300);
 });
 
-// Navigasi keyboard pada dropdown
 namaInput.addEventListener('keydown', function(e) {
     const items = autocompleteDropdown.querySelectorAll('.autocomplete-item');
     if (items.length === 0) return;
@@ -170,7 +263,6 @@ function updateActiveItem(items) {
     });
 }
 
-// Tampilkan dropdown autocomplete
 function showAutocomplete(query) {
     const lowerQuery = query.toLowerCase();
     const matches = guestNamesData
@@ -216,20 +308,27 @@ function escapeRegex(string) {
     return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-// Pilih item dari autocomplete dan auto-fill
 function selectAutocompleteItem(data) {
     namaInput.value = data.nama;
     
+    // Set asal dan trigger change event
     document.getElementById('asal').value = data.asal || '';
     const event = new Event('change');
     document.getElementById('asal').dispatchEvent(event);
     
+    // Auto-fill instansi jika ada
     if (data.asal === 'Instansi' && data.namaInstansi && data.namaInstansi !== '-') {
         setTimeout(() => {
             document.getElementById('namaInstansi').value = data.namaInstansi;
         }, 100);
     }
     
+    // 🆕 Auto-fill alamat (dengan validasi)
+    if (data.alamat && data.alamat !== '-') {
+        document.getElementById('alamat').value = data.alamat;
+    }
+    
+    // Auto-fill field lainnya
     if (data.tujuan) {
         document.getElementById('tujuan').value = data.tujuan;
     }
@@ -245,6 +344,7 @@ function selectAutocompleteItem(data) {
     autofillNotice.classList.remove('hidden');
     hideAutocomplete();
     
+    // Fokus ke field keperluan untuk UX lebih baik
     setTimeout(() => {
         document.getElementById('keperluan').focus();
     }, 200);
@@ -262,12 +362,62 @@ document.addEventListener('click', function(e) {
     }
 });
 
-// === SUBMIT FORM ===
+// ============================================
+// SUBMIT FORM
+// ============================================
+
 guestForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     
-    if (asalSelect.value === 'Instansi' && !namaInstansiInput.value.trim()) {
+    // 🆕 Validasi semua field required
+    const nama = document.getElementById('nama').value.trim();
+    const asal = asalSelect.value;
+    const namaInstansi = namaInstansiInput.value.trim();
+    const alamat = document.getElementById('alamat').value.trim();
+    const tujuan = document.getElementById('tujuan').value;
+    const keperluan = document.getElementById('keperluan').value.trim();
+    const noHp = document.getElementById('noHp').value.trim();
+    
+    if (!nama) {
+        showModal('error', 'Nama lengkap wajib diisi!');
+        document.getElementById('nama').focus();
+        return;
+    }
+    
+    if (asal === 'Instansi' && !namaInstansi) {
         showModal('error', 'Nama instansi wajib diisi!');
+        namaInstansiInput.focus();
+        return;
+    }
+    
+    if (!alamat) {
+        showModal('error', 'Alamat wajib diisi!');
+        document.getElementById('alamat').focus();
+        return;
+    }
+    
+    if (!tujuan) {
+        showModal('error', 'Tujuan kunjungan wajib dipilih!');
+        document.getElementById('tujuan').focus();
+        return;
+    }
+    
+    if (!keperluan) {
+        showModal('error', 'Keperluan wajib diisi!');
+        document.getElementById('keperluan').focus();
+        return;
+    }
+    
+    if (!noHp) {
+        showModal('error', 'Nomor Handphone/Whatsapp wajib diisi!');
+        document.getElementById('noHp').focus();
+        return;
+    }
+    
+    // Validasi format nomor HP (opsional)
+    if (!/^[0-9+\-\s()]{8,20}$/.test(noHp)) {
+        showModal('error', 'Format nomor handphone tidak valid!');
+        document.getElementById('noHp').focus();
         return;
     }
 
@@ -275,61 +425,77 @@ guestForm.addEventListener('submit', async (e) => {
 
     const formData = {
         action: 'addGuest',
-        nama: document.getElementById('nama').value,
-        asal: asalSelect.value,
-        namaInstansi: asalSelect.value === 'Instansi' ? namaInstansiInput.value : '-',
-        tujuan: document.getElementById('tujuan').value,
-        keperluan: document.getElementById('keperluan').value,
-        noHp: document.getElementById('noHp').value,
+        nama: nama,
+        asal: asal,
+        namaInstansi: asal === 'Instansi' ? namaInstansi : '-',
+        alamat: alamat,
+        tujuan: tujuan,
+        keperluan: keperluan,
+        noHp: noHp,
         fotoSelfie: fotoSelfieInput.value || 'Tidak ada foto'
     };
 
     try {
-        const response = await fetch(API_URL, { method: 'POST', body: JSON.stringify(formData) });
+        const response = await fetch(API_URL, { 
+            method: 'POST', 
+            body: JSON.stringify(formData) 
+        });
         const result = await response.json();
 
         if (result.status === 'success') {
             showModal('success', 'Terima kasih! Data tamu berhasil disimpan.');
-            
-            // Reset Form & Kamera ke kondisi awal
             resetForm();
-            
-            // 🆕 Refresh daftar nama tamu agar nama yang baru saja mengisi bisa muncul di autocomplete
-            loadGuestNames();
+            loadGuestNames(); // Refresh daftar nama untuk autocomplete
         } else {
-            showModal('error', 'Gagal menyimpan data: ' + result.message);
+            showModal('error', 'Gagal menyimpan data: ' + (result.message || 'Unknown error'));
         }
     } catch (error) {
-        showModal('error', 'Terjadi kesalahan jaringan. Coba lagi.');
+        console.error('Submit error:', error);
+        showModal('error', 'Terjadi kesalahan jaringan. Silakan coba lagi.');
     } finally {
         showLoading(false);
     }
 });
 
-// 🆕 Fungsi baru untuk reset form secara lengkap
+// 🆕 Fungsi reset form yang lebih lengkap
 function resetForm() {
+    // Reset form HTML
     guestForm.reset();
     
-    // Reset kamera
+    // Reset kamera ke state idle
     fotoSelfieInput.value = '';
+    
+    // Sembunyikan semua elemen kamera
     photoPreview.classList.add('hidden');
+    photoPreview.classList.remove('animate-fade-in');
+    photoPreview.src = '';
+    
     videoElement.classList.add('hidden');
+    videoElement.srcObject = null;
+    
     cameraPlaceholder.classList.remove('hidden');
     cameraBox.classList.remove('active');
+    cameraOverlay.classList.add('hidden');
     
-    btnRetake.classList.add('hidden');
-    btnStartCamera.classList.remove('hidden');
+    // Reset instansi group
     instansiGroup.classList.add('hidden');
     
+    // Reset state kamera
+    cameraState = 'idle';
+    
+    // Hentikan stream kamera jika masih aktif
     if (stream) {
         stream.getTracks().forEach(track => track.stop());
         stream = null;
     }
     
-    // 🆕 Reset autocomplete state
+    // Reset autocomplete
     hideAutocomplete();
     autofillNotice.classList.add('hidden');
     autocompleteIndex = -1;
+    
+    // 🆕 Scroll ke atas form
+    window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 // === UTILITY FUNCTIONS ===
