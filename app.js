@@ -1,4 +1,4 @@
-const API_URL = 'https://script.google.com/macros/s/AKfycbwnT4kw4BC60Mu1Bve525ARoilh-6I5aGdDFGOXVRMb1ypzxhROah2_ojrP2gqpWRw1/exec';
+const API_URL = 'https://script.google.com/macros/s/AKfycbwWYCnuJsrgFWeacZoyCzTqXyusE4_1YWA4a0uG0PXud2HD1-8R3Y3hll5IscG-3J88/exec';
 
 // === ELEMEN DOM ===
 const guestForm = document.getElementById('guestForm');
