@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <link rel="icon" href="LogoETAMU.jpeg" type="image/png">
+    <title>E-Tamu Kemenag Kab. Tanah Datar</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <div class="logo-container animate-fade-in">
+            <img src="kemenag.png" alt="Logo Kemenag">
+            <h2>E-Tamu Kantor Kementerian Agama<br>Kabupaten Tanah Datar</h2>
+        </div>
+
+        <form id="guestForm" class="animate-slide-up" novalidate>
+            <div class="form-grid">
+                <!-- KOLOM KIRI: Form Input Data -->
+                <div class="form-column">
+                    <!-- Autocomplete Nama -->
+                    <div class="form-group">
+                        <label for="nama">Nama Lengkap *</label>
+                        <div class="autocomplete-container">
+                            <input type="text" id="nama" class="form-control" required autocomplete="off" placeholder="Ketik nama untuk mencari...">
+                            <div id="autocompleteDropdown" class="autocomplete-dropdown hidden"></div>
+                        </div>
+                        <small id="autofillNotice" class="autofill-notice hidden">
+                            ✨ Data Anda sudah terisi otomatis dari kunjungan sebelumnya
+                        </small>
+                    </div>
+
+                    <!-- Asal Tamu -->
+                    <div class="form-group">
+                        <label for="asal">Berasal Dari *</label>
+                        <select id="asal" class="form-control" required>
+                            <option value="">-- Pilih --</option>
+                            <option value="Umum">Umum</option>
+                            <option value="Instansi">Instansi</option>
+                        </select>
+                    </div>
+
+                    <!-- Nama Instansi (Muncul jika pilih Instansi) -->
+                    <div class="form-group hidden" id="instansiGroup">
+                        <label for="namaInstansi">Nama Instansi *</label>
+                        <input type="text" id="namaInstansi" class="form-control" autocomplete="organization">
+                    </div>
+
+                    <!-- Alamat -->
+                    <div class="form-group">
+                        <label for="alamat">Alamat *</label>
+                        <textarea id="alamat" class="form-control" rows="2" required placeholder="Masukkan alamat lengkap..." autocomplete="street-address"></textarea>
+                    </div>
+
+                    <!-- Tujuan Kunjungan -->
+                    <div class="form-group">
+                        <label for="tujuan">Tujuan *</label>
+                        <select id="tujuan" class="form-control" required>
+                            <option value="">-- Pilih Tujuan --</option>
+                            <option value="Kepala Kantor">Kepala Kantor</option>
+                            <option value="Kasubag TU">Kasubag TU</option>
+                            <option value="PTSP">PTSP</option>
+                            <option value="Kepegawaian">Kepegawaian</option>
+                            <option value="Keuangan">Keuangan</option>
+                            <option value="Perencana">Perencana</option>
+                            <option value="Humas">Humas</option>
+                            <option value="Penerjemah">Penerjemah</option>
+                            <option value="Pengawas">Pengawas</option>
+                            <option value="PAIS">Pendidikan Agama Islam (PAIS)</option>
+                            <option value="PD.PONTREN">Pendidikan Pondok Pesantren (PD.PONTREN)</option>
+                            <option value="PENMAD">Pendidikan Madrasah (PENMAD)</option>
+                            <option value="BIMAS">Bimbingan Masyarakat Islam (BIMAS)</option>
+                            <option value="ZAWA">Penyelenggara Zakat dan Wakaf (ZAWA)</option>
+                        </select>
+                    </div>
+
+                    <!-- Keperluan -->
+                    <div class="form-group">
+                        <label for="keperluan">Keperluan *</label>
+                        <textarea id="keperluan" class="form-control" rows="3" required placeholder="Jelaskan keperluan Anda..."></textarea>
+                    </div>
+
+                    <!-- Nomor HP -->
+                    <div class="form-group">
+                        <label for="noHp">Nomor Handphone/Whatsapp *</label>
+                        <input type="tel" id="noHp" class="form-control" required inputmode="tel" autocomplete="tel" placeholder="Contoh: 08123456789">
+                    </div>
+                </div>
+
+                <!-- KOLOM KANAN: Area Kamera Interaktif -->
+                <div class="camera-column">
+                    <label>Foto Selfie (Opsional)</label>
+                    
+                    <!-- Kamera Box dengan Klik Langsung -->
+                    <div class="camera-box" id="cameraBox">
+                        <!-- State 1: Placeholder (Idle) -->
+                        <div id="cameraPlaceholder" class="camera-placeholder camera-clickable">
+                            <span>📷</span>
+                            <p>Klik di sini untuk<br>mulai kamera</p>
+                        </div>
+                        
+                        <!-- State 2: Video Preview (Active) -->
+                        <video id="videoElement" autoplay playsinline muted class="hidden camera-clickable"></video>
+                        <canvas id="canvasElement" class="hidden"></canvas>
+                        
+                        <!-- State 3: Photo Preview (Captured) -->
+                        <img id="photoPreview" alt="Preview Selfie" class="hidden camera-clickable">
+                        
+                        <!-- Overlay Button di dalam Kamera -->
+                        <div id="cameraOverlay" class="camera-overlay hidden">
+                            <div class="camera-overlay-icon" id="cameraOverlayIcon">📸</div>
+                            <div class="camera-overlay-text" id="cameraOverlayText">Tap untuk ambil foto</div>
+                        </div>
+                    </div>
+                    
+                    <input type="hidden" id="fotoSelfie" name="fotoSelfie">
+                    
+                    <!-- Helper Text -->
+                    <small class="camera-helper">
+                        💡 Tip: Tap langsung pada area kamera untuk mengambil foto
+                    </small>
+                </div>
+            </div>
+
+            <button type="submit" class="btn-primary" style="margin-top: 2rem;">Kirim Data Tamu</button>
+        </form>
+
+        <div class="admin-link">
+            <a href="dashboard.html">🔒 Login Admin</a>
+        </div>
+    </div>
+
+    <!-- Footer dengan Animasi -->
+    <footer class="footer">
+        <div class="footer-content">
+            <div class="footer-line footer-line-1">Dibuat oleh Ihsan Putra Hanifi, S.Kom</div>
+            <div class="footer-line footer-line-2">Pranata Komputer</div>
+            <div class="footer-line footer-line-3">Kantor Kementerian Agama Kab. Tanah Datar</div>
+        </div>
+        <div class="footer-decoration">
+            <span class="footer-dot"></span>
+            <span class="footer-dot"></span>
+            <span class="footer-dot"></span>
+        </div>
+    </footer>
+
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay" class="loading-overlay hidden">
+        <div class="spinner"></div>
+        <div class="loading-text">Loading / Mengambil data...</div>
+    </div>
+
+    <!-- Notification Modal -->
+    <div id="notificationModal" class="modal hidden">
+        <div class="modal-content">
+            <h3 id="modalTitle">Notifikasi</h3>
+            <p id="modalMessage">Pesan notifikasi.</p>
+            <button class="btn-primary" onclick="closeModal()" style="margin-top: 1rem;">Tutup</button>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
