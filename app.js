@@ -41,7 +41,7 @@ function speakText(text) {
         const utterance = new SpeechSynthesisUtterance(text);
         utterance.lang = 'id-ID'; // Menggunakan bahasa Indonesia
         utterance.rate = 0.5;     // Kecepatan sedikit lebih lambat agar terdengar jelas dan formal
-        utterance.pitch = 4;      // Nada normal
+        utterance.pitch = 1;      // Nada normal
         utterance.volume = 2;     // Volume penuh
         
         window.speechSynthesis.speak(utterance);
