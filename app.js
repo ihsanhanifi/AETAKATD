@@ -30,10 +30,46 @@ let guestNamesData = [];
 let autocompleteIndex = -1;
 let debounceTimer = null;
 let cameraState = 'idle'; // 'idle', 'active', 'captured'
+let hasWelcomed = false; // 🆕 Untuk mencegah suara selamat datang diputar berulang kali
+
+// === FUNGSI HELPER UNTUK TEXT-TO-SPEECH (SUARA) ===
+function speakText(text) {
+    if ('speechSynthesis' in window) {
+        // Batalkan suara yang sedang berjalan agar tidak tumpang tindih
+        window.speechSynthesis.cancel();
+        
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = 'id-ID'; // Menggunakan bahasa Indonesia
+        utterance.rate = 0.9;     // Kecepatan sedikit lebih lambat agar terdengar jelas dan formal
+        utterance.pitch = 1;      // Nada normal
+        utterance.volume = 1;     // Volume penuh
+        
+        window.speechSynthesis.speak(utterance);
+    } else {
+        console.warn("Browser ini tidak mendukung fitur Text-to-Speech.");
+    }
+}
 
 // === INISIALISASI ===
 document.addEventListener('DOMContentLoaded', () => {
     loadGuestNames();
+    
+    // 🆕 TRIGGER SUARA SELAMAT DATANG PADA INTERAKSI PERTAMA
+    // (Diperlukan karena browser memblokir autoplay audio tanpa interaksi user)
+    const playWelcomeOnFirstInteraction = () => {
+        if (!hasWelcomed) {
+            speakText("Selamat Datang di Aplikasi E-Tamu Kantor Kementerian Agama Kabupaten Tanah Datar");
+            hasWelcomed = true;
+        }
+        // Hapus event listener setelah pertama kali dipicu agar tidak membebani performa
+        document.removeEventListener('click', playWelcomeOnFirstInteraction);
+        document.removeEventListener('keydown', playWelcomeOnFirstInteraction);
+        document.removeEventListener('touchstart', playWelcomeOnFirstInteraction);
+    };
+
+    document.addEventListener('click', playWelcomeOnFirstInteraction);
+    document.addEventListener('keydown', playWelcomeOnFirstInteraction);
+    document.addEventListener('touchstart', playWelcomeOnFirstInteraction);
 });
 
 // === TOGGLE INSTANSI INPUT ===
@@ -290,7 +326,7 @@ document.addEventListener('click', function(e) {
 });
 
 // ============================================
-// SUBMIT FORM (DENGAN SAFEGUARD FOTO)
+// SUBMIT FORM (DENGAN SAFEGUARD FOTO & SUARA)
 // ============================================
 
 guestForm.addEventListener('submit', async (e) => {
@@ -343,6 +379,10 @@ guestForm.addEventListener('submit', async (e) => {
 
         if (result.status === 'success') {
             showModal('success', 'Terima kasih! Data tamu berhasil disimpan.');
+            
+            // 🆕 TRIGGER SUARA TERIMA KASIH SETELAH BERHASIL
+            speakText("Terima kasih telah mengisi E-Tamu");
+            
             resetForm();
             loadGuestNames(); 
         } else {
