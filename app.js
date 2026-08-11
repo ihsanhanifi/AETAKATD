@@ -30,9 +30,9 @@ let guestNamesData = [];
 let autocompleteIndex = -1;
 let debounceTimer = null;
 let cameraState = 'idle'; // 'idle', 'active', 'captured'
-let hasWelcomed = false; // 🆕 Untuk mencegah suara selamat datang diputar berulang kali
+let hasWelcomed = false; // Mencegah suara selamat datang diputar berulang kali
 
-// === FUNGSI HELPER UNTUK TEXT-TO-SPEECH (SUARA) ===
+// === 🆕 FUNGSI HELPER UNTUK TEXT-TO-SPEECH (SUARA) ===
 function speakText(text) {
     if ('speechSynthesis' in window) {
         // Batalkan suara yang sedang berjalan agar tidak tumpang tindih
@@ -42,7 +42,7 @@ function speakText(text) {
         utterance.lang = 'id-ID'; // Menggunakan bahasa Indonesia
         utterance.rate = 0.9;     // Kecepatan sedikit lebih lambat agar terdengar jelas dan formal
         utterance.pitch = 1;      // Nada normal
-        utterance.volume = 2;     // Volume penuh
+        utterance.volume = 1;     // Volume penuh
         
         window.speechSynthesis.speak(utterance);
     } else {
@@ -380,8 +380,8 @@ guestForm.addEventListener('submit', async (e) => {
         if (result.status === 'success') {
             showModal('success', 'Terima kasih! Data tamu berhasil disimpan.');
             
-            // 🆕 TRIGGER SUARA TERIMA KASIH SETELAH BERHASIL
-            speakText("Terima kasih telah mengisi E-Tamu");
+            // 🆕 TRIGGER SUARA TERIMA KASIH (TEKS LENGKAP SESUAI PERMINTAAN)
+            speakText("Terima Kasih Telah mengisi E-Tamu Kantor Kementerian Agama Kabupaten Tanah Datar");
             
             resetForm();
             loadGuestNames(); 
@@ -443,7 +443,7 @@ function showModal(type, message) {
     if (modalTitle) {
         if (type === 'success') modalTitle.innerText = '✅ Berhasil';
         else if (type === 'error') modalTitle.innerText = '❌ Gagal';
-        else modalTitle.innerText = 'Notifikasi';
+        else modalTitle.innerText = 'ℹ️ Notifikasi';
     }
     if (modalMessage) modalMessage.innerText = message;
     notificationModal.classList.remove('hidden');
