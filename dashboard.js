@@ -1,9 +1,9 @@
 const API_URL = 'https://script.google.com/macros/s/AKfycbwuaPawE1a26fkcR8htUiU0X7rTyBeNIEBW12rI2hpE4XAw6SQuiJYS6Ym14sP1iTU8/exec';
 
 let currentUser = null;
-let allGuests = [];
+let allGuests = []; // 🆕 Sekarang hanya menyimpan data yang sedang difilter (Sangat Ringan!)
 let allUsers = [];
-let currentFilter = { type: 'month', seksi: 'all' }; // 🆕 Default ke 'month'
+let currentFilter = { type: 'month', seksi: 'all' }; 
 
 // === VARIABEL IDLE MONITORING ===
 let idleTimer = null;
@@ -111,7 +111,7 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
     }
 });
 
-// === 🆕 DASHBOARD (DEFAULT FILTER BULAN INI UNTUK KECEPATAN MAKSIMAL) ===
+// === 🆕 DASHBOARD: DEFAULT RINGAN (HANYA BULAN INI) ===
 async function showDashboard() {
     document.getElementById('loginSection').classList.add('hidden');
     document.getElementById('dashboardSection').classList.remove('hidden');
@@ -145,8 +145,8 @@ async function showDashboard() {
     
     toggleFilterInputs(); 
     
-    await loadGuests(); // Mengambil data tamu bulan ini (cepat)
-    applyFilter(); 
+    // 🚀 Langsung panggil applyFilter untuk mengambil data bulan ini dari server (Ringan & Cepat)
+    await applyFilter(); 
     
     if (currentUser.role === 'admin_utama') loadUsers();
 
@@ -178,7 +178,6 @@ async function loadStatsSilent() {
         const currentMonth = now.getMonth() + 1;
         const currentYear = now.getFullYear();
         
-        // 🚀 Kirim parameter bulan & tahun untuk auto-refresh yang cepat
         const url = `${API_URL}?action=getDetailedStats&role=${currentUser.role}&seksi=${currentUser.seksi || ''}&month=${currentMonth}&year=${currentYear}`;
         const res = await fetch(url);
         const data = await res.json();
@@ -334,7 +333,7 @@ function switchTab(tabName, btnElement) {
     if (btnElement) btnElement.classList.add('active');
     
     if (tabName === 'guests') {
-        loadGuests().then(() => applyFilter());
+        applyFilter(); // 🆕 Terapkan filter saat kembali ke tab tamu
     }
     if (tabName === 'stats') loadStats();
     if (tabName === 'users') loadUsers();
@@ -350,7 +349,6 @@ async function loadStats() {
     const currentYear = now.getFullYear();
 
     try {
-        // 🚀 Kirim parameter bulan & tahun untuk pengambilan data yang super cepat
         const url = `${API_URL}?action=getDetailedStats&role=${currentUser.role}&seksi=${currentUser.seksi || ''}&month=${currentMonth}&year=${currentYear}`;
         const res = await fetch(url);
         const data = await res.json();
@@ -492,18 +490,22 @@ function calculateTrend(current, previous) {
 }
 
 // ============================================
-// DATA TAMU & PERFORMA (SERVER-SIDE FILTERING)
+// 🚀 DATA TAMU (SERVER-SIDE FILTERING)
 // ============================================
 
-// 🆕 Fungsi loadGuests yang menerima parameter bulan & tahun untuk kecepatan maksimal
-async function loadGuests(targetMonth = null, targetYear = null, skipRender = false) {
-    showLoading(true, targetMonth ? "Mengambil data tamu..." : "Mengambil data tamu bulan ini...");
+// 🆕 Fungsi loadGuests yang menerima parameter filter untuk kecepatan maksimal
+async function loadGuests(params = {}, skipRender = false) {
+    if (!skipRender) showLoading(true, "Mengambil data tamu...");
     try {
         let url = `${API_URL}?action=getGuests&role=${currentUser.role}&seksi=${currentUser.seksi || ''}`;
         
-        // 🚀 Jika bulan & tahun disediakan, kirim ke server agar difilter di sumber (Sangat Cepat!)
-        if (targetMonth && targetYear) {
-            url += `&month=${targetMonth}&year=${targetYear}`;
+        // 🚀 Kirim parameter ke server agar difilter di sumber (Sangat Cepat & Ringan!)
+        if (params.month && params.year) {
+            url += `&month=${params.month}&year=${params.year}`;
+        } else if (params.targetDate) {
+            url += `&targetDate=${params.targetDate}`;
+        } else if (params.startDate && params.endDate) {
+            url += `&startDate=${params.startDate}&endDate=${params.endDate}`;
         }
         
         const res = await fetch(url);
@@ -522,7 +524,7 @@ async function loadGuests(targetMonth = null, targetYear = null, skipRender = fa
         console.error('Error loading guests:', err);
         showModal('error', 'Gagal memuat data tamu');
     } finally {
-        showLoading(false);
+        if (!skipRender) showLoading(false);
     }
 }
 
@@ -580,7 +582,7 @@ async function exportToExcel() {
         return;
     }
     
-    // 🆕 Export data yang sedang difilter di layar
+    // 🆕 Export data yang sedang difilter di layar (sudah akurat karena allGuests sudah difilter server)
     const dataToExport = getFilteredData();
     
     if (!dataToExport || dataToExport.length === 0) {
@@ -638,48 +640,11 @@ async function exportToExcel() {
     }
 }
 
-// 🆕 Fungsi bantu untuk mendapatkan data yang sedang difilter (konsisten dengan tampilan layar)
+// 🆕 Fungsi bantu yang disederhanakan (karena server sudah melakukan filtering utama)
 function getFilteredData() {
-    let filtered = [...allGuests];
-    const now = new Date();
+    let filtered = [...allGuests]; // allGuests sudah berisi data periode yang diminta dari server
     
-    if (currentFilter.type === 'today') {
-        filtered = filtered.filter(g => new Date(g.timestamp).toDateString() === now.toDateString());
-    } else if (currentFilter.type === 'month') {
-        filtered = filtered.filter(g => {
-            const d = new Date(g.timestamp);
-            return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-        });
-    } else if (currentFilter.type === 'specific_month') {
-        const selectedMonth = document.getElementById('filterMonth').value;
-        if (selectedMonth) {
-            const [year, month] = selectedMonth.split('-').map(Number);
-            filtered = filtered.filter(g => {
-                const d = new Date(g.timestamp);
-                return d.getMonth() === (month - 1) && d.getFullYear() === year;
-            });
-        }
-    } else if (currentFilter.type === 'week') {
-        const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-        filtered = filtered.filter(g => new Date(g.timestamp) >= weekAgo);
-    } else if (currentFilter.type === 'year') {
-        filtered = filtered.filter(g => new Date(g.timestamp).getFullYear() === now.getFullYear());
-    } else if (currentFilter.type === 'specific_year') {
-        const selectedYear = parseInt(document.getElementById('filterYear').value);
-        if (selectedYear) {
-            filtered = filtered.filter(g => new Date(g.timestamp).getFullYear() === selectedYear);
-        }
-    } else if (currentFilter.type === 'range') {
-        const dateFrom = document.getElementById('filterDateFrom').value;
-        const dateTo = document.getElementById('filterDateTo').value;
-        if (dateFrom && dateTo) {
-            const from = new Date(dateFrom);
-            const to = new Date(dateTo);
-            to.setHours(23, 59, 59, 999);
-            filtered = filtered.filter(g => { const d = new Date(g.timestamp); return d >= from && d <= to; });
-        }
-    }
-    
+    // Terapkan filter tambahan di client-side (Seksi)
     if (currentUser.role === 'admin_utama' && currentFilter.seksi !== 'all') {
         filtered = filtered.filter(g => g.tujuan === currentFilter.seksi);
     }
@@ -749,7 +714,7 @@ function toggleFilterInputs() {
     }
 }
 
-// 🆕 APPLY FILTER YANG CERDAS (Server-Side + Client-Side)
+// 🚀 APPLY FILTER YANG CERDAS (Server-Side Filtering Utama)
 async function applyFilter() {
     showLoading(true, "Menerapkan filter data...");
     
@@ -760,69 +725,63 @@ async function applyFilter() {
     const now = new Date();
     const months = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
     let summaryText = "";
+    const fetchParams = {};
     
-    // 1. Fetch data dari server jika diperlukan (untuk mencegah overload browser)
-    if (filterType === 'all') {
-        await loadGuests(null, null, true); // Ambil semua data dari server
-    } else if (filterType === 'specific_month') {
-        const selectedMonth = document.getElementById('filterMonth').value;
-        if (!selectedMonth) { showModal('error', 'Silakan pilih bulan terlebih dahulu!'); showLoading(false); return; }
-        const [year, month] = selectedMonth.split('-').map(Number);
-        await loadGuests(month, year, true); // Ambil data bulan tertentu dari server
-    }
-    
-    // 2. Lakukan filtering di client-side berdasarkan allGuests yang sudah ter-update
-    let filtered = [...allGuests];
-    
+    // 🎯 Tentukan parameter untuk fetch dari server (Sangat Ringan!)
     if (filterType === 'today') {
-        filtered = filtered.filter(g => new Date(g.timestamp).toDateString() === now.toDateString());
+        fetchParams.targetDate = now.toISOString().split('T')[0];
         summaryText = `Hari Ini (${now.getDate()} ${months[now.getMonth()]} ${now.getFullYear()})`;
     } else if (filterType === 'specific_date') {
         const selectedDate = document.getElementById('filterDate').value;
         if (!selectedDate) { showModal('error', 'Silakan pilih tanggal terlebih dahulu!'); showLoading(false); return; }
+        fetchParams.targetDate = selectedDate;
         const selected = new Date(selectedDate);
-        filtered = filtered.filter(g => new Date(g.timestamp).toDateString() === selected.toDateString());
         summaryText = `Hari Tertentu: ${selected.getDate()} ${months[selected.getMonth()]} ${selected.getFullYear()}`;
     } else if (filterType === 'week') {
         const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-        filtered = filtered.filter(g => new Date(g.timestamp) >= weekAgo);
+        fetchParams.startDate = weekAgo.toISOString().split('T')[0];
+        fetchParams.endDate = now.toISOString().split('T')[0];
         summaryText = `Minggu Ini`;
     } else if (filterType === 'month') {
-        filtered = filtered.filter(g => {
-            const d = new Date(g.timestamp);
-            return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-        });
+        fetchParams.month = now.getMonth() + 1;
+        fetchParams.year = now.getFullYear();
         summaryText = `Bulan Ini: ${months[now.getMonth()]} ${now.getFullYear()}`;
     } else if (filterType === 'specific_month') {
-        const selectedMonth = document.getElementById('filterMonth').value;
-        const [year, month] = selectedMonth.split('-').map(Number);
-        filtered = filtered.filter(g => {
-            const d = new Date(g.timestamp);
-            return d.getMonth() === (month - 1) && d.getFullYear() === year;
-        });
-        summaryText = `Bulan Tertentu: ${months[month - 1]} ${year}`;
+        const val = document.getElementById('filterMonth').value;
+        if (!val) { showModal('error', 'Silakan pilih bulan terlebih dahulu!'); showLoading(false); return; }
+        const [y, m] = val.split('-').map(Number);
+        fetchParams.month = m;
+        fetchParams.year = y;
+        summaryText = `Bulan Tertentu: ${months[m - 1]} ${y}`;
     } else if (filterType === 'year') {
-        filtered = filtered.filter(g => new Date(g.timestamp).getFullYear() === now.getFullYear());
+        fetchParams.startDate = `${now.getFullYear()}-01-01`;
+        fetchParams.endDate = `${now.getFullYear()}-12-31`;
         summaryText = `Tahun Ini (${now.getFullYear()})`;
     } else if (filterType === 'specific_year') {
         const selectedYear = parseInt(document.getElementById('filterYear').value);
         if (!selectedYear) { showModal('error', 'Silakan pilih tahun terlebih dahulu!'); showLoading(false); return; }
-        filtered = filtered.filter(g => new Date(g.timestamp).getFullYear() === selectedYear);
+        fetchParams.startDate = `${selectedYear}-01-01`;
+        fetchParams.endDate = `${selectedYear}-12-31`;
         summaryText = `Tahun Tertentu: ${selectedYear}`;
     } else if (filterType === 'range') {
-        const dateFrom = document.getElementById('filterDateFrom').value;
-        const dateTo = document.getElementById('filterDateTo').value;
-        if (!dateFrom || !dateTo) { showModal('error', 'Silakan pilih rentang tanggal!'); showLoading(false); return; }
-        const from = new Date(dateFrom);
-        const to = new Date(dateTo);
+        fetchParams.startDate = document.getElementById('filterDateFrom').value;
+        fetchParams.endDate = document.getElementById('filterDateTo').value;
+        if (!fetchParams.startDate || !fetchParams.endDate) { showModal('error', 'Silakan pilih rentang tanggal!'); showLoading(false); return; }
+        const from = new Date(fetchParams.startDate);
+        const to = new Date(fetchParams.endDate);
         to.setHours(23, 59, 59, 999);
         if (from > to) { showModal('error', 'Tanggal "Dari" tidak boleh lebih besar dari "Sampai"!'); showLoading(false); return; }
-        filtered = filtered.filter(g => { const d = new Date(g.timestamp); return d >= from && d <= to; });
-        summaryText = `Rentang: ${from.getDate()} ${months[from.getMonth()]} s/d ${to.getDate()} ${months[to.getMonth()]}`;
-    } else {
+        summaryText = `Rentang: ${from.getDate()} ${months[from.getMonth()]} ${from.getFullYear()} s/d ${to.getDate()} ${months[to.getMonth()]} ${to.getFullYear()}`;
+    } else if (filterType === 'all') {
         summaryText = "Semua Data";
+        // Tidak ada parameter = ambil semua data
     }
     
+    // 🚀 Fetch data dari server berdasarkan parameter (Sangat Cepat!)
+    await loadGuests(fetchParams, true);
+    
+    // Terapkan filter tambahan di client-side (misal: filter Seksi)
+    let filtered = [...allGuests];
     if (currentUser.role === 'admin_utama' && filterSeksi !== 'all') {
         filtered = filtered.filter(g => g.tujuan === filterSeksi);
         summaryText += ` | Seksi: ${filterSeksi}`;
@@ -841,7 +800,7 @@ function resetFilter() {
     toggleFilterInputs();
     currentFilter = { type: 'month', seksi: 'all' };
     
-    loadGuests().then(() => applyFilter()); // 🆕 Muat ulang data bulan ini
+    applyFilter(); // 🆕 Muat ulang data bulan ini
 }
 
 function updateFilterSummary(text) {
