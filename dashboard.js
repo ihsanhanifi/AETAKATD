@@ -3,20 +3,33 @@ const API_URL = 'https://script.google.com/macros/s/AKfycbwuaPawE1a26fkcR8htUiU0
 let currentUser = null;
 let allGuests = [];
 let allUsers = [];
-let currentFilter = { type: 'all', seksi: 'all' };
+let currentFilter = { type: 'month', seksi: 'all' }; // 🆕 Default ke 'month'
 
 // === VARIABEL IDLE MONITORING ===
 let idleTimer = null;
 let countdownTimer = null;
 let countdownValue = 30;
-const IDLE_TIMEOUT = 120000; // 2 menit = 120.000 ms
-const WARNING_BEFORE = 30000; // Warning muncul 30 detik sebelum logout
+const IDLE_TIMEOUT = 120000;
+const WARNING_BEFORE = 30000;
 let lastActivityTime = Date.now();
 let mouseMoveThrottle = null;
 
 // === VARIABEL AUTO-REFRESH ===
 let statsRefreshInterval = null;
-const STATS_REFRESH_INTERVAL = 60000; // Refresh statistik setiap 60 detik
+const STATS_REFRESH_INTERVAL = 60000;
+
+// === FUNGSI HELPER UNTUK TEXT-TO-SPEECH (SUARA) ===
+function speakText(text) {
+    if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = 'id-ID';
+        utterance.rate = 0.9;
+        utterance.pitch = 1;
+        utterance.volume = 1;
+        window.speechSynthesis.speak(utterance);
+    }
+}
 
 // === INISIALISASI ===
 document.addEventListener('DOMContentLoaded', () => {
@@ -33,7 +46,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
     
-    // Inisialisasi Filter
     populateYearOptions();
     const today = new Date().toISOString().split('T')[0];
     const filterDate = document.getElementById('filterDate');
@@ -44,21 +56,17 @@ document.addEventListener('DOMContentLoaded', () => {
     if (filterDate) filterDate.value = today;
     if (filterDateFrom) filterDateFrom.value = today;
     if (filterDateTo) filterDateTo.value = today;
-    if (filterMonth) filterMonth.value = today.substring(0, 7);
+    if (filterMonth) filterMonth.value = today.substring(0, 7); 
 });
 
-// === FUNGSI UPDATE DATETIME DENGAN ANIMASI ===
 function updateDateTime() {
     const now = new Date();
-    const options = { 
-        weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', 
-        hour: '2-digit', minute: '2-digit', second: '2-digit' 
-    };
+    const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' };
     const el = document.getElementById('currentDateTime');
     if (el) {
         el.innerText = now.toLocaleDateString('id-ID', options);
         el.classList.remove('animate-pulse-once');
-        void el.offsetWidth; // Force reflow untuk restart animasi
+        void el.offsetWidth;
         el.classList.add('animate-pulse-once');
     }
 }
@@ -84,24 +92,27 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
             currentUser = data.user;
             localStorage.setItem('etamu_user', JSON.stringify(currentUser));
             
-            showModal('success', `Selamat datang, ${currentUser.username}!`);
+            const welcomeMsg = `Selamat datang, ${currentUser.username}. Terima Kasih Telah Menggunakan E-Tamu Kantor Kementerian Agama Kabupaten Tanah Datar`;
+            showModal('success', welcomeMsg);
+            speakText(welcomeMsg);
+            
             setTimeout(() => {
                 closeModal();
                 showDashboard();
-            }, 1000);
+            }, 3500); 
         } else {
             showModal('error', data.message || 'Username atau password salah!');
         }
     } catch (err) {
         console.error('Login error:', err);
-        showModal('error', 'Gagal terhubung ke server. Periksa koneksi internet Anda.');
+        showModal('error', 'Gagal terhubung ke server.');
     } finally {
         showLoading(false);
     }
 });
 
-// === DASHBOARD ===
-function showDashboard() {
+// === 🆕 DASHBOARD (DEFAULT FILTER BULAN INI UNTUK KECEPATAN MAKSIMAL) ===
+async function showDashboard() {
     document.getElementById('loginSection').classList.add('hidden');
     document.getElementById('dashboardSection').classList.remove('hidden');
     
@@ -127,8 +138,16 @@ function showDashboard() {
         if (printTitle) printTitle.innerText = `Laporan Data Tamu Seksi ${currentUser.seksi}`;
     }
     
-    loadStats();
-    loadGuests();
+    loadStats(); // Mengambil statistik bulan ini (cepat)
+    
+    const filterTypeEl = document.getElementById('filterType');
+    if (filterTypeEl) filterTypeEl.value = 'month'; 
+    
+    toggleFilterInputs(); 
+    
+    await loadGuests(); // Mengambil data tamu bulan ini (cepat)
+    applyFilter(); 
+    
     if (currentUser.role === 'admin_utama') loadUsers();
 
     startIdleMonitoring();
@@ -138,7 +157,6 @@ function showDashboard() {
 // === AUTO-REFRESH STATISTIK ===
 function startStatsAutoRefresh() {
     if (statsRefreshInterval) clearInterval(statsRefreshInterval);
-    
     statsRefreshInterval = setInterval(() => {
         const statsTab = document.getElementById('tab-stats');
         if (statsTab && !statsTab.classList.contains('hidden')) {
@@ -156,7 +174,13 @@ function stopStatsAutoRefresh() {
 
 async function loadStatsSilent() {
     try {
-        const res = await fetch(`${API_URL}?action=getDetailedStats&role=${currentUser.role}&seksi=${currentUser.seksi || ''}`);
+        const now = new Date();
+        const currentMonth = now.getMonth() + 1;
+        const currentYear = now.getFullYear();
+        
+        // 🚀 Kirim parameter bulan & tahun untuk auto-refresh yang cepat
+        const url = `${API_URL}?action=getDetailedStats&role=${currentUser.role}&seksi=${currentUser.seksi || ''}&month=${currentMonth}&year=${currentYear}`;
+        const res = await fetch(url);
         const data = await res.json();
         if (data.status !== 'success') return;
         
@@ -172,7 +196,6 @@ async function loadStatsSilent() {
 function updateStatCardValue(gridId, index, value) {
     const grid = document.getElementById(gridId);
     if (!grid) return;
-    
     const cards = grid.querySelectorAll('.stat-card');
     if (cards[index]) {
         const h3 = cards[index].querySelector('h3');
@@ -197,7 +220,6 @@ function startIdleMonitoring() {
 function stopIdleMonitoring() {
     if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
     if (countdownTimer) { clearInterval(countdownTimer); countdownTimer = null; }
-    
     const events = ['mousedown', 'keydown', 'scroll', 'touchstart', 'click', 'mousemove'];
     events.forEach(event => {
         document.removeEventListener(event, resetIdleTimer);
@@ -279,14 +301,20 @@ function performIdleLogout() {
 
 function logout() {
     if (!confirm('🚪 Apakah Anda yakin ingin logout?')) return;
+    
+    const goodbyeMsg = "Terima Kasih Telah Menggunakan E-Tamu Kantor Kementerian Agama Kabupaten Tanah Datar";
+    showModal('info', goodbyeMsg);
+    speakText(goodbyeMsg);
+    
     stopIdleMonitoring();
     stopStatsAutoRefresh();
     showLoading(true, "Logging out...");
+    
     setTimeout(() => {
         localStorage.removeItem('etamu_user');
         showLoading(false);
         location.reload();
-    }, 500);
+    }, 3500); 
 }
 
 function switchTab(tabName, btnElement) {
@@ -298,14 +326,16 @@ function switchTab(tabName, btnElement) {
     if (target) {
         target.classList.remove('hidden');
         target.classList.remove('animate-fade-in');
-        void target.offsetWidth; // Force reflow
+        void target.offsetWidth;
         target.classList.add('animate-fade-in');
     }
     
     document.querySelectorAll('.nav-tab').forEach(el => el.classList.remove('active'));
     if (btnElement) btnElement.classList.add('active');
     
-    if (tabName === 'guests') loadGuests();
+    if (tabName === 'guests') {
+        loadGuests().then(() => applyFilter());
+    }
     if (tabName === 'stats') loadStats();
     if (tabName === 'users') loadUsers();
 }
@@ -313,11 +343,16 @@ function switchTab(tabName, btnElement) {
 // ============================================
 // STATISTIK DETAIL LENGKAP
 // ============================================
-
 async function loadStats() {
-    showLoading(true, "Mengambil data statistik lengkap...");
+    showLoading(true, "Mengambil data statistik...");
+    const now = new Date();
+    const currentMonth = now.getMonth() + 1;
+    const currentYear = now.getFullYear();
+
     try {
-        const res = await fetch(`${API_URL}?action=getDetailedStats&role=${currentUser.role}&seksi=${currentUser.seksi || ''}`);
+        // 🚀 Kirim parameter bulan & tahun untuk pengambilan data yang super cepat
+        const url = `${API_URL}?action=getDetailedStats&role=${currentUser.role}&seksi=${currentUser.seksi || ''}&month=${currentMonth}&year=${currentYear}`;
+        const res = await fetch(url);
         const data = await res.json();
         if (data.status !== 'success') {
             showModal('error', 'Gagal memuat statistik');
@@ -457,22 +492,27 @@ function calculateTrend(current, previous) {
 }
 
 // ============================================
-// DATA TAMU & PERFORMA
+// DATA TAMU & PERFORMA (SERVER-SIDE FILTERING)
 // ============================================
 
-async function loadGuests() {
-    showLoading(true, "Mengambil data tamu...");
-    const startTime = performance.now();
-    
+// 🆕 Fungsi loadGuests yang menerima parameter bulan & tahun untuk kecepatan maksimal
+async function loadGuests(targetMonth = null, targetYear = null, skipRender = false) {
+    showLoading(true, targetMonth ? "Mengambil data tamu..." : "Mengambil data tamu bulan ini...");
     try {
-        const res = await fetch(`${API_URL}?action=getGuests&role=${currentUser.role}&seksi=${currentUser.seksi || ''}`);
+        let url = `${API_URL}?action=getGuests&role=${currentUser.role}&seksi=${currentUser.seksi || ''}`;
+        
+        // 🚀 Jika bulan & tahun disediakan, kirim ke server agar difilter di sumber (Sangat Cepat!)
+        if (targetMonth && targetYear) {
+            url += `&month=${targetMonth}&year=${targetYear}`;
+        }
+        
+        const res = await fetch(url);
         const data = await res.json();
         allGuests = data.guests || [];
         
-        renderGuestsTable(allGuests);
-        
-        const endTime = performance.now();
-        updatePerformanceInfo(allGuests.length, (endTime - startTime).toFixed(2));
+        if (!skipRender) {
+            renderGuestsTable(allGuests);
+        }
         
         if (currentUser.role === 'admin_utama') {
             const filterSeksiRow = document.getElementById('filterSeksiRow');
@@ -486,7 +526,6 @@ async function loadGuests() {
     }
 }
 
-// 🆕 FUNGSI RENDER DENGAN FALLBACK FOTO & CORS FIX
 function renderGuestsTable(guests) {
     const tbody = document.querySelector('#guestsTable tbody');
     if (!tbody) return;
@@ -497,26 +536,18 @@ function renderGuestsTable(guests) {
         return;
     }
     
-    // Base64 placeholder image (ikon kamera sederhana) jika link Drive gagal dimuat
     const fallbackImg = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI1MCIgaGVpZ2h0PSI1MCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSIjZjBmMGYwIiBzdHJva2U9IiM5OTkiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cmVjdCB4PSIzIiB5PSIzIiB3aWR0aD0iMTgiIGhlaWdodD0iMTgiIHJ4PSIyIiByeT0iMiI+PC9yZWN0PjxjaXJjbGUgY3g9IjguNSIgY3k9IjguNSIgcj0iMS41Ij48L2NpcmNsZT48cG9seWxpbmUgcG9pbnRzPSIyMSAxNSAxNiAxMCA1IDIxIj48L3BvbHlsaW5lPjwvc3ZnPg==";
     
     guests.forEach((g, index) => {
         const date = new Date(g.timestamp).toLocaleString('id-ID');
         let photoCell = '';
-        
         const fotoVal = String(g.fotoSelfie || '').trim();
         
-        // 🆕 Cek apakah ini link Drive yang valid (mendukung format lama dan baru lh3) atau base64
         if (fotoVal !== 'Tidak ada foto' && fotoVal.length > 20 && (fotoVal.startsWith('data:image') || fotoVal.includes('googleusercontent.com') || fotoVal.includes('drive.google.com'))) {
             const safeName = g.nama.replace(/'/g, "\\'");
-            
-            // 🛡️ FALLBACK & CORS: Tambahkan crossorigin="anonymous" untuk mencegah blokir browser
             photoCell = `
                 <td class="no-print" style="text-align: center;">
-                    <img src="${fotoVal}" 
-                         alt="Foto ${safeName}" 
-                         class="photo-thumbnail" 
-                         crossorigin="anonymous"
+                    <img src="${fotoVal}" alt="Foto ${safeName}" class="photo-thumbnail" crossorigin="anonymous"
                          onerror="this.onerror=null; this.src='${fallbackImg}'; this.style.border='2px dashed #ccc'; this.style.cursor='default'; this.onclick=null;"
                          onclick="openLightbox('${fotoVal}', '${safeName} - ${date}')">
                 </td>`;
@@ -541,16 +572,19 @@ function renderGuestsTable(guests) {
 }
 
 // ============================================
-// EXPORT EXCEL FUNCTIONS (Ringan & Cepat)
+// EXPORT EXCEL FUNCTIONS
 // ============================================
-
 async function exportToExcel() {
     if (typeof XLSX === 'undefined') {
-        showModal('error', 'Library Excel belum dimuat. Periksa koneksi internet Anda.');
+        showModal('error', 'Library Excel belum dimuat.');
         return;
     }
-    if (!allGuests || allGuests.length === 0) {
-        showModal('error', 'Tidak ada data untuk di-export!');
+    
+    // 🆕 Export data yang sedang difilter di layar
+    const dataToExport = getFilteredData();
+    
+    if (!dataToExport || dataToExport.length === 0) {
+        showModal('error', 'Tidak ada data untuk di-export pada filter ini!');
         return;
     }
     
@@ -559,9 +593,7 @@ async function exportToExcel() {
     showLoading(true, "Mempersiapkan data Excel...");
     
     try {
-        const startTime = performance.now();
-        
-        const excelData = allGuests.map((g, index) => {
+        const excelData = dataToExport.map((g, index) => {
             const date = new Date(g.timestamp);
             const fotoVal = String(g.fotoSelfie || '');
             return {
@@ -578,11 +610,10 @@ async function exportToExcel() {
             };
         });
         
-        const statsData = generateStatsSummary();
         const wb = XLSX.utils.book_new();
-        
         const ws1 = XLSX.utils.json_to_sheet(excelData);
         ws1['!cols'] = [{ wch: 5 }, { wch: 12 }, { wch: 10 }, { wch: 25 }, { wch: 20 }, { wch: 30 }, { wch: 20 }, { wch: 30 }, { wch: 15 }, { wch: 15 }];
+        
         const headerRange = XLSX.utils.decode_range(ws1['!ref']);
         for (let C = headerRange.s.c; C <= headerRange.e.c; C++) {
             const cellAddress = XLSX.utils.encode_cell({ r: 0, c: C });
@@ -591,92 +622,74 @@ async function exportToExcel() {
         }
         ws1['!autofilter'] = { ref: ws1['!ref'] };
         
-        const ws2 = XLSX.utils.json_to_sheet(statsData);
-        ws2['!cols'] = [{ wch: 30 }, { wch: 15 }];
-        const headerRange2 = XLSX.utils.decode_range(ws2['!ref']);
-        for (let C = headerRange2.s.c; C <= headerRange2.e.c; C++) {
-            const cellAddress = XLSX.utils.encode_cell({ r: 0, c: C });
-            if (!ws2[cellAddress]) ws2[cellAddress] = {};
-            ws2[cellAddress].s = { font: { bold: true, color: { rgb: "FFFFFF" } }, fill: { fgColor: { rgb: "006A4E" } }, alignment: { horizontal: "center" } };
-        }
-        
         XLSX.utils.book_append_sheet(wb, ws1, "Data Tamu");
-        XLSX.utils.book_append_sheet(wb, ws2, "Ringkasan Statistik");
-        wb.Props = { Title: "Laporan Data Tamu", Subject: "Kemenag Kab. Tanah Datar", Author: "E-Tamu System", CreatedDate: new Date() };
         
         const now = new Date();
-        const fileName = `Laporan_Tamu_${now.toLocaleDateString('id-ID').replace(/\//g, '-')}_${now.toLocaleTimeString('id-ID').replace(/:/g, '-')}.xlsx`;
+        const fileName = `Laporan_Tamu_${now.toLocaleDateString('id-ID').replace(/\//g, '-')}.xlsx`;
         XLSX.writeFile(wb, fileName);
         
-        const endTime = performance.now();
-        updatePerformanceInfo(allGuests.length, (endTime - startTime).toFixed(2));
-        
-        showLoading(false);
-        showModal('success', `✅ Excel berhasil di-export!\n\n📊 ${allGuests.length} data\n⏱️ Proses: ${(endTime - startTime).toFixed(2)}ms`);
-        
+        showModal('success', `✅ Excel berhasil di-export!\n\n📊 ${dataToExport.length} data`);
     } catch (err) {
         console.error('Export Excel error:', err);
-        showLoading(false);
         showModal('error', 'Gagal export Excel: ' + err.message);
     } finally {
-        const btn = document.getElementById('btnExportExcel');
         if (btn) { btn.classList.remove('loading'); btn.disabled = false; }
+        showLoading(false);
     }
 }
 
-function generateStatsSummary() {
-    const stats = [];
+// 🆕 Fungsi bantu untuk mendapatkan data yang sedang difilter (konsisten dengan tampilan layar)
+function getFilteredData() {
+    let filtered = [...allGuests];
     const now = new Date();
-    let todayCount = 0, thisWeekCount = 0, thisMonthCount = 0, thisYearCount = 0;
-    let instansiCount = 0, umumCount = 0;
-    const perSeksi = {};
-    const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
     
-    allGuests.forEach(g => {
-        const gDate = new Date(g.timestamp);
-        if (gDate.toDateString() === now.toDateString()) todayCount++;
-        if (gDate >= weekAgo) thisWeekCount++;
-        if (gDate.getMonth() === now.getMonth() && gDate.getFullYear() === now.getFullYear()) thisMonthCount++;
-        if (gDate.getFullYear() === now.getFullYear()) thisYearCount++;
-        if (g.asal === 'Instansi') instansiCount++;
-        else if (g.asal === 'Umum') umumCount++;
-        perSeksi[g.tujuan] = (perSeksi[g.tujuan] || 0) + 1;
-    });
+    if (currentFilter.type === 'today') {
+        filtered = filtered.filter(g => new Date(g.timestamp).toDateString() === now.toDateString());
+    } else if (currentFilter.type === 'month') {
+        filtered = filtered.filter(g => {
+            const d = new Date(g.timestamp);
+            return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+        });
+    } else if (currentFilter.type === 'specific_month') {
+        const selectedMonth = document.getElementById('filterMonth').value;
+        if (selectedMonth) {
+            const [year, month] = selectedMonth.split('-').map(Number);
+            filtered = filtered.filter(g => {
+                const d = new Date(g.timestamp);
+                return d.getMonth() === (month - 1) && d.getFullYear() === year;
+            });
+        }
+    } else if (currentFilter.type === 'week') {
+        const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        filtered = filtered.filter(g => new Date(g.timestamp) >= weekAgo);
+    } else if (currentFilter.type === 'year') {
+        filtered = filtered.filter(g => new Date(g.timestamp).getFullYear() === now.getFullYear());
+    } else if (currentFilter.type === 'specific_year') {
+        const selectedYear = parseInt(document.getElementById('filterYear').value);
+        if (selectedYear) {
+            filtered = filtered.filter(g => new Date(g.timestamp).getFullYear() === selectedYear);
+        }
+    } else if (currentFilter.type === 'range') {
+        const dateFrom = document.getElementById('filterDateFrom').value;
+        const dateTo = document.getElementById('filterDateTo').value;
+        if (dateFrom && dateTo) {
+            const from = new Date(dateFrom);
+            const to = new Date(dateTo);
+            to.setHours(23, 59, 59, 999);
+            filtered = filtered.filter(g => { const d = new Date(g.timestamp); return d >= from && d <= to; });
+        }
+    }
     
-    stats.push({ 'Kategori': '📊 RINGKASAN STATISTIK', 'Jumlah': '' });
-    stats.push({ 'Kategori': 'Total Keseluruhan Tamu', 'Jumlah': allGuests.length });
-    stats.push({ 'Kategori': 'Tamu Hari Ini', 'Jumlah': todayCount });
-    stats.push({ 'Kategori': 'Tamu Minggu Ini', 'Jumlah': thisWeekCount });
-    stats.push({ 'Kategori': 'Tamu Bulan Ini', 'Jumlah': thisMonthCount });
-    stats.push({ 'Kategori': 'Tamu Tahun Ini', 'Jumlah': thisYearCount });
-    stats.push({ 'Kategori': '', 'Jumlah': '' });
-    stats.push({ 'Kategori': '🏢 BREAKDOWN ASAL', 'Jumlah': '' });
-    stats.push({ 'Kategori': 'Dari Instansi', 'Jumlah': instansiCount });
-    stats.push({ 'Kategori': 'Dari Umum', 'Jumlah': umumCount });
-    stats.push({ 'Kategori': '', 'Jumlah': '' });
-    stats.push({ 'Kategori': '📋 TAMU PER SEKSI', 'Jumlah': '' });
+    if (currentUser.role === 'admin_utama' && currentFilter.seksi !== 'all') {
+        filtered = filtered.filter(g => g.tujuan === currentFilter.seksi);
+    }
     
-    Object.entries(perSeksi).sort((a, b) => b[1] - a[1]).forEach(([seksi, count]) => {
-        stats.push({ 'Kategori': `  ${seksi}`, 'Jumlah': count });
-    });
-    
-    stats.push({ 'Kategori': '', 'Jumlah': '' });
-    stats.push({ 'Kategori': `Dicetak: ${now.toLocaleString('id-ID')}`, 'Jumlah': '' });
-    stats.push({ 'Kategori': `Oleh: ${currentUser ? currentUser.username : 'Unknown'}`, 'Jumlah': '' });
-    return stats;
-}
-
-function updatePerformanceInfo(count, time) {
-    const countEl = document.getElementById('dataCount');
-    const timeEl = document.getElementById('processTime');
-    if (countEl) countEl.innerText = count;
-    if (timeEl) timeEl.innerText = time;
+    return filtered;
 }
 
 // ============================================
 // LIGHTBOX & FILTER
 // ============================================
-
 function openLightbox(imageSrc, caption) {
     const lightbox = document.getElementById('photoLightbox');
     const img = document.getElementById('lightboxImage');
@@ -736,18 +749,30 @@ function toggleFilterInputs() {
     }
 }
 
-function applyFilter() {
+// 🆕 APPLY FILTER YANG CERDAS (Server-Side + Client-Side)
+async function applyFilter() {
     showLoading(true, "Menerapkan filter data...");
-    const startTime = performance.now();
     
     const filterType = document.getElementById('filterType').value;
     const filterSeksi = document.getElementById('filterSeksi').value;
     currentFilter = { type: filterType, seksi: filterSeksi };
     
-    let filtered = [...allGuests];
     const now = new Date();
     const months = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
     let summaryText = "";
+    
+    // 1. Fetch data dari server jika diperlukan (untuk mencegah overload browser)
+    if (filterType === 'all') {
+        await loadGuests(null, null, true); // Ambil semua data dari server
+    } else if (filterType === 'specific_month') {
+        const selectedMonth = document.getElementById('filterMonth').value;
+        if (!selectedMonth) { showModal('error', 'Silakan pilih bulan terlebih dahulu!'); showLoading(false); return; }
+        const [year, month] = selectedMonth.split('-').map(Number);
+        await loadGuests(month, year, true); // Ambil data bulan tertentu dari server
+    }
+    
+    // 2. Lakukan filtering di client-side berdasarkan allGuests yang sudah ter-update
+    let filtered = [...allGuests];
     
     if (filterType === 'today') {
         filtered = filtered.filter(g => new Date(g.timestamp).toDateString() === now.toDateString());
@@ -761,15 +786,20 @@ function applyFilter() {
     } else if (filterType === 'week') {
         const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
         filtered = filtered.filter(g => new Date(g.timestamp) >= weekAgo);
-        summaryText = `Minggu Ini (${weekAgo.getDate()} ${months[weekAgo.getMonth()]} s/d ${now.getDate()} ${months[now.getMonth()]} ${now.getFullYear()})`;
+        summaryText = `Minggu Ini`;
     } else if (filterType === 'month') {
-        filtered = filtered.filter(g => { const d = new Date(g.timestamp); return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear(); });
-        summaryText = `Bulan Ini (${months[now.getMonth()]} ${now.getFullYear()})`;
+        filtered = filtered.filter(g => {
+            const d = new Date(g.timestamp);
+            return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+        });
+        summaryText = `Bulan Ini: ${months[now.getMonth()]} ${now.getFullYear()}`;
     } else if (filterType === 'specific_month') {
         const selectedMonth = document.getElementById('filterMonth').value;
-        if (!selectedMonth) { showModal('error', 'Silakan pilih bulan terlebih dahulu!'); showLoading(false); return; }
         const [year, month] = selectedMonth.split('-').map(Number);
-        filtered = filtered.filter(g => { const d = new Date(g.timestamp); return d.getMonth() === (month - 1) && d.getFullYear() === year; });
+        filtered = filtered.filter(g => {
+            const d = new Date(g.timestamp);
+            return d.getMonth() === (month - 1) && d.getFullYear() === year;
+        });
         summaryText = `Bulan Tertentu: ${months[month - 1]} ${year}`;
     } else if (filterType === 'year') {
         filtered = filtered.filter(g => new Date(g.timestamp).getFullYear() === now.getFullYear());
@@ -782,13 +812,13 @@ function applyFilter() {
     } else if (filterType === 'range') {
         const dateFrom = document.getElementById('filterDateFrom').value;
         const dateTo = document.getElementById('filterDateTo').value;
-        if (!dateFrom || !dateTo) { showModal('error', 'Silakan pilih rentang tanggal (dari dan sampai)!'); showLoading(false); return; }
+        if (!dateFrom || !dateTo) { showModal('error', 'Silakan pilih rentang tanggal!'); showLoading(false); return; }
         const from = new Date(dateFrom);
         const to = new Date(dateTo);
         to.setHours(23, 59, 59, 999);
         if (from > to) { showModal('error', 'Tanggal "Dari" tidak boleh lebih besar dari "Sampai"!'); showLoading(false); return; }
         filtered = filtered.filter(g => { const d = new Date(g.timestamp); return d >= from && d <= to; });
-        summaryText = `Rentang: ${from.getDate()} ${months[from.getMonth()]} ${from.getFullYear()} s/d ${to.getDate()} ${months[to.getMonth()]} ${to.getFullYear()}`;
+        summaryText = `Rentang: ${from.getDate()} ${months[from.getMonth()]} s/d ${to.getDate()} ${months[to.getMonth()]}`;
     } else {
         summaryText = "Semua Data";
     }
@@ -799,7 +829,6 @@ function applyFilter() {
     }
     
     renderGuestsTable(filtered);
-    updatePerformanceInfo(filtered.length, (performance.now() - startTime).toFixed(2));
     updateFilterSummary(summaryText);
     updatePrintHeaderForFilter(filterType, summaryText);
     
@@ -807,14 +836,12 @@ function applyFilter() {
 }
 
 function resetFilter() {
-    document.getElementById('filterType').value = 'all';
+    document.getElementById('filterType').value = 'month'; // 🆕 Kembali ke default cepat
     document.getElementById('filterSeksi').value = 'all';
     toggleFilterInputs();
-    currentFilter = { type: 'all', seksi: 'all' };
-    renderGuestsTable(allGuests);
-    updatePerformanceInfo(allGuests.length, '0.00');
-    updateFilterSummary('');
-    updatePrintHeader('all');
+    currentFilter = { type: 'month', seksi: 'all' };
+    
+    loadGuests().then(() => applyFilter()); // 🆕 Muat ulang data bulan ini
 }
 
 function updateFilterSummary(text) {
@@ -838,11 +865,7 @@ function updatePrintHeader(filter) {
     const months = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
     let periodText = "";
     if (filter === 'today') periodText = `Laporan Harian - Tanggal: ${now.getDate()}, Bulan: ${months[now.getMonth()]}, Tahun: ${now.getFullYear()}`;
-    else if (filter === 'week') {
-        const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-        periodText = `Laporan Mingguan - Periode: ${weekAgo.getDate()} ${months[weekAgo.getMonth()]} s/d ${now.getDate()} ${months[now.getMonth()]} ${now.getFullYear()}`;
-    } else if (filter === 'month') periodText = `Laporan Bulanan - Bulan: ${months[now.getMonth()]}, Tahun: ${now.getFullYear()}`;
-    else if (filter === 'year') periodText = `Laporan Tahunan - Tahun: ${now.getFullYear()}`;
+    else if (filter === 'month') periodText = `Laporan Bulanan - Bulan: ${months[now.getMonth()]}, Tahun: ${now.getFullYear()}`;
     else periodText = `Laporan Keseluruhan - Dicetak pada: ${now.getDate()} ${months[now.getMonth()]} ${now.getFullYear()}`;
     
     const printPeriod = document.getElementById('printPeriod');
@@ -859,7 +882,6 @@ function printReport() {
 // ============================================
 // USER MANAGEMENT
 // ============================================
-
 async function loadUsers() {
     showLoading(true, "Mengambil data user...");
     try {
@@ -1024,7 +1046,6 @@ async function saveSettings() {
 // ============================================
 // UTILITIES
 // ============================================
-
 function togglePassword() {
     const input = document.getElementById('password');
     if (input) input.type = input.type === 'password' ? 'text' : 'password';
@@ -1060,7 +1081,6 @@ function closeModal() {
     if (modal) modal.classList.add('hidden');
 }
 
-// CLEANUP saat halaman ditutup
 window.addEventListener('beforeunload', () => {
     stopIdleMonitoring();
     stopStatsAutoRefresh();
