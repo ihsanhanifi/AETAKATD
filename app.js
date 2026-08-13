@@ -30,20 +30,18 @@ let guestNamesData = [];
 let autocompleteIndex = -1;
 let debounceTimer = null;
 let cameraState = 'idle'; // 'idle', 'active', 'captured'
-let hasWelcomed = false; // Mencegah suara selamat datang diputar berulang kali
+let hasWelcomed = false; 
+let isSubmitting = false; // 🆕 Mencegah double submit akibat jaringan lag
 
 // === 🆕 FUNGSI HELPER UNTUK TEXT-TO-SPEECH (SUARA) ===
 function speakText(text) {
     if ('speechSynthesis' in window) {
-        // Batalkan suara yang sedang berjalan agar tidak tumpang tindih
         window.speechSynthesis.cancel();
-        
         const utterance = new SpeechSynthesisUtterance(text);
-        utterance.lang = 'id-ID'; // Menggunakan bahasa Indonesia
-        utterance.rate = 0.9;     // Kecepatan sedikit lebih lambat agar terdengar jelas dan formal
-        utterance.pitch = 1;      // Nada normal
-        utterance.volume = 1;     // Volume penuh
-        
+        utterance.lang = 'id-ID';
+        utterance.rate = 0.9;
+        utterance.pitch = 1;
+        utterance.volume = 1;
         window.speechSynthesis.speak(utterance);
     } else {
         console.warn("Browser ini tidak mendukung fitur Text-to-Speech.");
@@ -54,14 +52,11 @@ function speakText(text) {
 document.addEventListener('DOMContentLoaded', () => {
     loadGuestNames();
     
-    // 🆕 TRIGGER SUARA SELAMAT DATANG PADA INTERAKSI PERTAMA
-    // (Diperlukan karena browser memblokir autoplay audio tanpa interaksi user)
     const playWelcomeOnFirstInteraction = () => {
         if (!hasWelcomed) {
             speakText("Selamat Datang di Aplikasi E-Tamu Kantor Kementerian Agama Kabupaten Tanah Datar");
             hasWelcomed = true;
         }
-        // Hapus event listener setelah pertama kali dipicu agar tidak membebani performa
         document.removeEventListener('click', playWelcomeOnFirstInteraction);
         document.removeEventListener('keydown', playWelcomeOnFirstInteraction);
         document.removeEventListener('touchstart', playWelcomeOnFirstInteraction);
@@ -86,9 +81,8 @@ asalSelect.addEventListener('change', function() {
 });
 
 // ============================================
-// KAMERA INTERAKTIF (TAP LANGSUNG DI AREA)
+// KAMERA INTERAKTIF
 // ============================================
-
 cameraPlaceholder.addEventListener('click', async (e) => {
     e.stopPropagation();
     if (cameraState === 'idle') await startCamera();
@@ -134,10 +128,10 @@ async function startCamera() {
     } catch (err) {
         console.error('Camera error:', err);
         let errorMsg = 'Gagal mengakses kamera. ';
-        if (err.name === 'NotAllowedError') errorMsg += 'Izin kamera ditolak. Silakan izinkan akses kamera di pengaturan browser Anda.';
-        else if (err.name === 'NotFoundError') errorMsg += 'Kamera tidak ditemukan pada perangkat ini.';
-        else if (err.name === 'NotReadableError') errorMsg += 'Kamera sedang digunakan oleh aplikasi lain.';
-        else errorMsg += 'Pastikan perangkat Anda memiliki kamera dan izin telah diberikan.';
+        if (err.name === 'NotAllowedError') errorMsg += 'Izin kamera ditolak.';
+        else if (err.name === 'NotFoundError') errorMsg += 'Kamera tidak ditemukan.';
+        else if (err.name === 'NotReadableError') errorMsg += 'Kamera sedang digunakan aplikasi lain.';
+        else errorMsg += 'Pastikan izin kamera telah diberikan.';
         showModal('error', errorMsg);
     } finally {
         showLoading(false);
@@ -146,7 +140,7 @@ async function startCamera() {
 
 function capturePhoto() {
     if (videoElement.readyState < 2) {
-        showModal('error', 'Kamera belum siap. Silakan tunggu sebentar dan coba lagi.');
+        showModal('error', 'Kamera belum siap. Silakan tunggu sebentar.');
         return;
     }
     
@@ -197,14 +191,12 @@ function flashCameraBox() {
 // ============================================
 // AUTOCOMPLETE & AUTO-FILL
 // ============================================
-
 async function loadGuestNames() {
     try {
         const res = await fetch(`${API_URL}?action=getGuestNames`);
         const data = await res.json();
         if (data.status === 'success') {
             guestNamesData = data.names || [];
-            console.log(`✅ Berhasil memuat ${guestNamesData.length} nama tamu untuk autocomplete`);
         }
     } catch (err) {
         console.warn('⚠️ Gagal memuat daftar nama:', err);
@@ -326,11 +318,21 @@ document.addEventListener('click', function(e) {
 });
 
 // ============================================
-// SUBMIT FORM (DENGAN SAFEGUARD FOTO & SUARA)
+// 🛡️ SUBMIT FORM (ANTI DOUBLE SUBMIT & SAFEGUARD)
 // ============================================
-
 guestForm.addEventListener('submit', async (e) => {
     e.preventDefault();
+    
+    // 1. CEGAH DOUBLE SUBMIT
+    if (isSubmitting) return;
+    isSubmitting = true;
+    
+    const submitBtn = e.target.querySelector('button[type="submit"]');
+    const originalBtnText = submitBtn ? submitBtn.innerText : 'Kirim Data Tamu';
+    if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.innerText = "Menyimpan...";
+    }
     
     const nama = document.getElementById('nama').value.trim();
     const asal = asalSelect.value;
@@ -340,23 +342,28 @@ guestForm.addEventListener('submit', async (e) => {
     const keperluan = document.getElementById('keperluan').value.trim();
     const noHp = document.getElementById('noHp').value.trim();
     
-    if (!nama) { showModal('error', 'Nama lengkap wajib diisi!'); document.getElementById('nama').focus(); return; }
-    if (asal === 'Instansi' && !namaInstansi) { showModal('error', 'Nama instansi wajib diisi!'); namaInstansiInput.focus(); return; }
-    if (!alamat) { showModal('error', 'Alamat wajib diisi!'); document.getElementById('alamat').focus(); return; }
-    if (!tujuan) { showModal('error', 'Tujuan kunjungan wajib dipilih!'); document.getElementById('tujuan').focus(); return; }
-    if (!keperluan) { showModal('error', 'Keperluan wajib diisi!'); document.getElementById('keperluan').focus(); return; }
-    if (!noHp) { showModal('error', 'Nomor Handphone/Whatsapp wajib diisi!'); document.getElementById('noHp').focus(); return; }
-    if (!/^[0-9+\-\s()]{8,20}$/.test(noHp)) { showModal('error', 'Format nomor handphone tidak valid! (Contoh: 08123456789)'); document.getElementById('noHp').focus(); return; }
+    // Fungsi bantu untuk mengembalikan tombol jika validasi gagal
+    const resetSubmitState = () => {
+        isSubmitting = false;
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.innerText = originalBtnText;
+        }
+    };
 
-    // 🛡️ SAFEGUARD FOTO: Validasi ketat sebelum dikirim
+    if (!nama) { showModal('error', 'Nama lengkap wajib diisi!'); document.getElementById('nama').focus(); resetSubmitState(); return; }
+    if (asal === 'Instansi' && !namaInstansi) { showModal('error', 'Nama instansi wajib diisi!'); namaInstansiInput.focus(); resetSubmitState(); return; }
+    if (!alamat) { showModal('error', 'Alamat wajib diisi!'); document.getElementById('alamat').focus(); resetSubmitState(); return; }
+    if (!tujuan) { showModal('error', 'Tujuan kunjungan wajib dipilih!'); document.getElementById('tujuan').focus(); resetSubmitState(); return; }
+    if (!keperluan) { showModal('error', 'Keperluan wajib diisi!'); document.getElementById('keperluan').focus(); resetSubmitState(); return; }
+    if (!noHp) { showModal('error', 'Nomor Handphone/Whatsapp wajib diisi!'); document.getElementById('noHp').focus(); resetSubmitState(); return; }
+    if (!/^[0-9+\-\s()]{8,20}$/.test(noHp)) { showModal('error', 'Format nomor handphone tidak valid!'); document.getElementById('noHp').focus(); resetSubmitState(); return; }
+
     let rawFoto = fotoSelfieInput.value;
-    let fotoToSend = 'Tidak ada foto'; // Default aman
+    let fotoToSend = 'Tidak ada foto';
     
-    // Hanya terima jika benar-benar string, panjangnya > 100 karakter (base64 minimal), dan mengandung 'base64,'
     if (typeof rawFoto === 'string' && rawFoto.length > 100 && rawFoto.includes('base64,')) {
         fotoToSend = rawFoto;
-    } else {
-        console.log("ℹ️ [FRONTEND] Foto tidak valid atau kosong, akan dikirim sebagai 'Tidak ada foto'");
     }
 
     showLoading(true, "Menyimpan data tamu...");
@@ -370,7 +377,7 @@ guestForm.addEventListener('submit', async (e) => {
         tujuan: tujuan,
         keperluan: keperluan,
         noHp: noHp,
-        fotoSelfie: fotoToSend // Nilai ini dijamin aman
+        fotoSelfie: fotoToSend
     };
 
     try {
@@ -378,11 +385,8 @@ guestForm.addEventListener('submit', async (e) => {
         const result = await response.json();
 
         if (result.status === 'success') {
-            showModal('success', 'Terima kasih! Data tamu berhasil disimpan.');
-            
-            // 🆕 TRIGGER SUARA TERIMA KASIH (TEKS LENGKAP SESUAI PERMINTAAN)
+            showModal('success', result.message || 'Terima kasih! Data tamu berhasil disimpan.');
             speakText("Terima Kasih Telah mengisi E-Tamu Kantor Kementerian Agama Kabupaten Tanah Datar");
-            
             resetForm();
             loadGuestNames(); 
         } else {
@@ -393,6 +397,7 @@ guestForm.addEventListener('submit', async (e) => {
         showModal('error', 'Terjadi kesalahan jaringan. Silakan periksa koneksi internet Anda.');
     } finally {
         showLoading(false);
+        resetSubmitState(); // Pastikan tombol diaktifkan kembali apapun hasilnya
     }
 });
 
