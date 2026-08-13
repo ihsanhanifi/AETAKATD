@@ -31,7 +31,7 @@ let autocompleteIndex = -1;
 let debounceTimer = null;
 let cameraState = 'idle'; // 'idle', 'active', 'captured'
 let hasWelcomed = false; 
-let isSubmitting = false; // 🆕 Mencegah double submit akibat jaringan lag
+let isSubmitting = false; // Mencegah double submit akibat jaringan lag
 
 // === 🆕 FUNGSI HELPER UNTUK TEXT-TO-SPEECH (SUARA) ===
 function speakText(text) {
@@ -48,10 +48,30 @@ function speakText(text) {
     }
 }
 
+// === 🆕 FUNGSI UNTUK MEMUAT BACKGROUND DINAMIS (SINKRON DENGAN DASHBOARD) ===
+async function loadSavedBackground() {
+    try {
+        const res = await fetch(`${API_URL}?action=getBackgroundUrl`);
+        const data = await res.json();
+        if (data.status === 'success' && data.url) {
+            // Tambahkan cache buster agar browser memuat gambar terbaru, bukan dari cache lama
+            const cacheBuster = new Date().getTime();
+            document.documentElement.style.setProperty('--bg-image', `url('${data.url}?t=${cacheBuster}')`);
+        }
+    } catch (err) {
+        console.error('Gagal memuat background dinamis:', err);
+    }
+}
+
 // === INISIALISASI ===
 document.addEventListener('DOMContentLoaded', () => {
+    // 🆕 1. Muat background dinamis dari server agar sinkron dengan dashboard
+    loadSavedBackground();
+    
+    // 2. Muat data nama untuk autocomplete
     loadGuestNames();
     
+    // 3. Setup suara selamat datang pada interaksi pertama
     const playWelcomeOnFirstInteraction = () => {
         if (!hasWelcomed) {
             speakText("Selamat Datang di Aplikasi E-Tamu Kantor Kementerian Agama Kabupaten Tanah Datar");
