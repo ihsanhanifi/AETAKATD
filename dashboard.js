@@ -1,7 +1,7 @@
 const API_URL = 'https://script.google.com/macros/s/AKfycbwuaPawE1a26fkcR8htUiU0X7rTyBeNIEBW12rI2hpE4XAw6SQuiJYS6Ym14sP1iTU8/exec';
 
 let currentUser = null;
-let allGuests = []; // 🆕 Sekarang hanya menyimpan data yang sedang difilter (Sangat Ringan!)
+let allGuests = []; // Hanya menyimpan data periode yang sedang diminta (Sangat Ringan!)
 let allUsers = [];
 let currentFilter = { type: 'month', seksi: 'all' }; 
 
@@ -111,7 +111,7 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
     }
 });
 
-// === 🆕 DASHBOARD: DEFAULT RINGAN (HANYA BULAN INI) ===
+// === 🚀 DASHBOARD: LAZY LOADING (INSTAN & MINIMALIS DATA) ===
 async function showDashboard() {
     document.getElementById('loginSection').classList.add('hidden');
     document.getElementById('dashboardSection').classList.remove('hidden');
@@ -138,17 +138,16 @@ async function showDashboard() {
         if (printTitle) printTitle.innerText = `Laporan Data Tamu Seksi ${currentUser.seksi}`;
     }
     
-    loadStats(); // Mengambil statistik bulan ini (cepat)
-    
+    // 🚀 LAZY LOADING: Setup default filter, tapi JANGAN load data berat di sini.
     const filterTypeEl = document.getElementById('filterType');
-    if (filterTypeEl) filterTypeEl.value = 'month'; 
+    if (filterTypeEl) filterTypeEl.value = 'month';
+    toggleFilterInputs();
     
-    toggleFilterInputs(); 
-    
-    // 🚀 Langsung panggil applyFilter untuk mengambil data bulan ini dari server (Ringan & Cepat)
-    await applyFilter(); 
-    
-    if (currentUser.role === 'admin_utama') loadUsers();
+    // Trigger tab default (guests) agar data diambil HANYA saat tab ini di-render
+    const defaultTabBtn = Array.from(document.querySelectorAll('.nav-tab')).find(btn => btn.getAttribute('onclick').includes('guests'));
+    if (defaultTabBtn) {
+        switchTab('guests', defaultTabBtn);
+    }
 
     startIdleMonitoring();
     startStatsAutoRefresh();
@@ -316,6 +315,7 @@ function logout() {
     }, 3500); 
 }
 
+// === 🚀 SWITCH TAB: LAZY LOADING (AMBIL DATA HANYA SAAT DIMINTA) ===
 function switchTab(tabName, btnElement) {
     const mobileNavTabs = document.getElementById('mobileNavTabs');
     if (mobileNavTabs) mobileNavTabs.classList.remove('active');
@@ -332,11 +332,14 @@ function switchTab(tabName, btnElement) {
     document.querySelectorAll('.nav-tab').forEach(el => el.classList.remove('active'));
     if (btnElement) btnElement.classList.add('active');
     
+    // 🚀 LAZY LOADING: Ambil data HANYA saat tab ini diklik
     if (tabName === 'guests') {
-        applyFilter(); // 🆕 Terapkan filter saat kembali ke tab tamu
+        applyFilter(); 
+    } else if (tabName === 'stats') {
+        loadStats(); 
+    } else if (tabName === 'users') {
+        loadUsers();
     }
-    if (tabName === 'stats') loadStats();
-    if (tabName === 'users') loadUsers();
 }
 
 // ============================================
@@ -493,7 +496,6 @@ function calculateTrend(current, previous) {
 // 🚀 DATA TAMU (SERVER-SIDE FILTERING)
 // ============================================
 
-// 🆕 Fungsi loadGuests yang menerima parameter filter untuk kecepatan maksimal
 async function loadGuests(params = {}, skipRender = false) {
     if (!skipRender) showLoading(true, "Mengambil data tamu...");
     try {
@@ -582,7 +584,6 @@ async function exportToExcel() {
         return;
     }
     
-    // 🆕 Export data yang sedang difilter di layar (sudah akurat karena allGuests sudah difilter server)
     const dataToExport = getFilteredData();
     
     if (!dataToExport || dataToExport.length === 0) {
@@ -640,11 +641,9 @@ async function exportToExcel() {
     }
 }
 
-// 🆕 Fungsi bantu yang disederhanakan (karena server sudah melakukan filtering utama)
 function getFilteredData() {
-    let filtered = [...allGuests]; // allGuests sudah berisi data periode yang diminta dari server
+    let filtered = [...allGuests];
     
-    // Terapkan filter tambahan di client-side (Seksi)
     if (currentUser.role === 'admin_utama' && currentFilter.seksi !== 'all') {
         filtered = filtered.filter(g => g.tujuan === currentFilter.seksi);
     }
@@ -727,7 +726,6 @@ async function applyFilter() {
     let summaryText = "";
     const fetchParams = {};
     
-    // 🎯 Tentukan parameter untuk fetch dari server (Sangat Ringan!)
     if (filterType === 'today') {
         fetchParams.targetDate = now.toISOString().split('T')[0];
         summaryText = `Hari Ini (${now.getDate()} ${months[now.getMonth()]} ${now.getFullYear()})`;
@@ -774,13 +772,11 @@ async function applyFilter() {
         summaryText = `Rentang: ${from.getDate()} ${months[from.getMonth()]} ${from.getFullYear()} s/d ${to.getDate()} ${months[to.getMonth()]} ${to.getFullYear()}`;
     } else if (filterType === 'all') {
         summaryText = "Semua Data";
-        // Tidak ada parameter = ambil semua data
     }
     
     // 🚀 Fetch data dari server berdasarkan parameter (Sangat Cepat!)
     await loadGuests(fetchParams, true);
     
-    // Terapkan filter tambahan di client-side (misal: filter Seksi)
     let filtered = [...allGuests];
     if (currentUser.role === 'admin_utama' && filterSeksi !== 'all') {
         filtered = filtered.filter(g => g.tujuan === filterSeksi);
@@ -795,12 +791,12 @@ async function applyFilter() {
 }
 
 function resetFilter() {
-    document.getElementById('filterType').value = 'month'; // 🆕 Kembali ke default cepat
+    document.getElementById('filterType').value = 'month';
     document.getElementById('filterSeksi').value = 'all';
     toggleFilterInputs();
     currentFilter = { type: 'month', seksi: 'all' };
     
-    applyFilter(); // 🆕 Muat ulang data bulan ini
+    applyFilter();
 }
 
 function updateFilterSummary(text) {
