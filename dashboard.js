@@ -31,11 +31,31 @@ function speakText(text) {
     }
 }
 
+// === 🆕 FUNGSI UNTUK MEMUAT BACKGROUND DINAMIS (SINKRON DENGAN DATABASE) ===
+async function loadSavedBackground() {
+    try {
+        const res = await fetch(`${API_URL}?action=getBackgroundUrl`);
+        const data = await res.json();
+        if (data.status === 'success' && data.url) {
+            // Tambahkan cache buster agar browser memuat gambar terbaru, bukan dari cache lama
+            const cacheBuster = new Date().getTime();
+            document.documentElement.style.setProperty('--bg-image', `url('${data.url}?t=${cacheBuster}')`);
+        }
+    } catch (err) {
+        console.error('Gagal memuat background dinamis:', err);
+    }
+}
+
 // === INISIALISASI ===
 document.addEventListener('DOMContentLoaded', () => {
+    // 🆕 1. Muat background dinamis dari server agar tidak kembali ke default saat refresh/logout
+    loadSavedBackground();
+    
+    // 2. Inisialisasi waktu
     updateDateTime();
     setInterval(updateDateTime, 1000);
     
+    // 3. Cek sesi login
     const savedUser = localStorage.getItem('etamu_user');
     if (savedUser) {
         try {
@@ -46,6 +66,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
     
+    // 4. Inisialisasi filter tanggal
     populateYearOptions();
     const today = new Date().toISOString().split('T')[0];
     const filterDate = document.getElementById('filterDate');
@@ -969,33 +990,68 @@ async function deleteUser(username) {
     }
 }
 
-async function saveSettings() {
-    const bgUrl = document.getElementById('bgUrlInput').value.trim();
-    if (!bgUrl) {
-        showModal('error', 'URL Background tidak boleh kosong');
+// ============================================
+// 🆕 PENGATURAN: UPLOAD BACKGROUND DARI LAPTOP (DENGAN CACHE BUSTER)
+// ============================================
+async function saveBackgroundImage() {
+    const fileInput = document.getElementById('bgFileInput');
+    const file = fileInput.files[0];
+
+    if (!file) {
+        showModal('error', 'Silakan pilih file gambar terlebih dahulu!');
         return;
     }
-    try { new URL(bgUrl); } catch (err) {
-        showModal('error', 'URL tidak valid. Pastikan format URL benar (https://...)');
+
+    // Batasi ukuran file maksimal 5MB untuk mencegah timeout Google Apps Script
+    if (file.size > 5 * 1024 * 1024) {
+        showModal('error', 'Ukuran file terlalu besar! Maksimal 5MB.');
         return;
     }
-    
-    showLoading(true, "Menyimpan pengaturan...");
-    try {
-        const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'saveSetting', key: 'bg_image', value: bgUrl }) });
-        const result = await res.json();
-        if (result.status === 'success') {
-            document.documentElement.style.setProperty('--bg-image', `url('${bgUrl}')`);
-            showModal('success', '✅ Pengaturan background berhasil disimpan!');
-        } else {
-            showModal('error', result.message || 'Gagal menyimpan pengaturan');
+
+    showLoading(true, "Sedang mengupload gambar ke Google Drive...");
+
+    const reader = new FileReader();
+    reader.onload = async function(e) {
+        const base64Data = e.target.result;
+        
+        // Buat nama file unik agar tidak menimpa file lama
+        const extension = file.name.split('.').pop();
+        const uniqueFileName = `bg_dashboard_${new Date().getTime()}.${extension}`;
+        
+        const payload = {
+            action: 'uploadBackground',
+            base64Data: base64Data,
+            fileName: uniqueFileName
+        };
+
+        try {
+            const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload) });
+            const result = await res.json();
+
+            if (result.status === 'success') {
+                // 🔥 PERBAIKAN KRUSIAL: Tambahkan timestamp (cache buster) ke URL
+                // Ini memaksa browser mengunduh gambar baru, bukan menggunakan cache lama yang "Access Denied"
+                const cacheBuster = new Date().getTime();
+                const finalUrl = `${result.url}?t=${cacheBuster}`;
+                
+                // Langsung update variabel CSS agar perubahan terlihat instan
+                document.documentElement.style.setProperty('--bg-image', `url('${finalUrl}')`);
+                
+                showModal('success', '✅ ' + result.message + '\n\n💡 Catatan: Jika background masih tidak muncul, pastikan Anda telah membuka Google Drive, klik kanan pada file gambar tersebut, pilih "Bagikan", dan ubah aksesnya menjadi "Siapa saja yang memiliki link".');
+                fileInput.value = ''; // Reset input file
+            } else {
+                showModal('error', result.message || 'Gagal menyimpan pengaturan');
+            }
+        } catch (err) {
+            console.error('Error saving settings:', err);
+            showModal('error', 'Gagal terhubung ke server saat upload.');
+        } finally {
+            showLoading(false);
         }
-    } catch (err) {
-        console.error('Error saving settings:', err);
-        showModal('error', 'Gagal menyimpan pengaturan');
-    } finally {
-        showLoading(false);
-    }
+    };
+    
+    // Mulai proses pembacaan file menjadi Base64
+    reader.readAsDataURL(file);
 }
 
 // ============================================
